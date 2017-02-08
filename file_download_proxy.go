@@ -32,7 +32,8 @@ type FileInfo struct {
 	HumanSize          string
 	HumanContentLength string
 	StartTimeStamp     int64
-	CompleteTimeStamp  int64
+	Duration           int64
+	Speed              string
 	IsDownloaded       bool
 }
 //index handler
@@ -66,13 +67,17 @@ func file_operation_handler(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		http.ServeFile(w, req, "download/" + filename)
+		//http.ServeFile(w, req, "download/" + filename)
+		http.Redirect(w, req, "/download/" + filename, http.StatusTemporaryRedirect)
 	case "POST":
 		download_url := req.PostFormValue("url")
+		if download_url == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		new_file_info := new(FileInfo)
 		new_file_info.SourceUrl = download_url
 		new_file_info.FileName = get_safe_filename(download_url)
-		new_file_info.IsDownloaded = false
 		files_info[new_file_info.FileName] = new_file_info
 		go wget_file(new_file_info)
 		//for calculate download speed roughly
@@ -119,6 +124,12 @@ func list_files(dirname string) int64 {
 				file_info.Size = file.Size()
 				file_info.HumanSize = get_human_size_string(file_info.Size)
 			}
+			if ! file_info.IsDownloaded {
+				duration := time.Now().Unix() - file_info.StartTimeStamp
+				if duration > 0 {
+					file_info.Speed = get_human_size_string(file_info.Size / duration) + "/S"
+				}
+			}
 			file_size += file.Size()
 		}
 	}
@@ -142,7 +153,7 @@ func delete_file(filename string) error {
 func wget_file(file_info *FileInfo) {
 	output, err := exec.Command("curl", "-IL", file_info.SourceUrl).Output()
 	if err != nil {
-		log.Println("error in curl", file_info.SourceUrl)
+		log.Println("error in curl:", file_info.SourceUrl, err.Error())
 	}
 	content_length := content_length_regexp.FindAllStringSubmatch(string(output), -1)
 	if content_length != nil {
@@ -151,20 +162,22 @@ func wget_file(file_info *FileInfo) {
 	//fmt.Printf("%v", content_length)
 	file_info.HumanContentLength = get_human_size_string(file_info.ContentLength)
 	log.Printf("Download: length:%s source:%s filename:%s \n", file_info.HumanContentLength, file_info.SourceUrl, file_info.FileName)
-	file_info.CompleteTimeStamp = time.Now().Unix()
+	file_info.StartTimeStamp = time.Now().Unix()
 	cmd := exec.Command("wget", "-O", "download/" + file_info.FileName, file_info.SourceUrl)
 	if err = cmd.Start(); err != nil {
 		log.Println("error in wget", file_info.SourceUrl)
 	}
 	cmd.Wait()
-	file_info.CompleteTimeStamp = time.Now().Unix()
+	file_info.Duration = time.Now().Unix() - file_info.StartTimeStamp
 	file_info.IsDownloaded = true
 }
 
 //utils
 func get_safe_filename(url string) string {
 	_, filename_in_url := path.Split(url)
+	fmt.Printf(filename_in_url)
 	filename := strings.Join(safe_filename_regexp.FindAllString(filename_in_url, -1), "")
+	fmt.Printf(filename)
 	file_ext := path.Ext(filename)
 	return fmt.Sprintf("%s-%v%s", strings.Replace(filename, file_ext, "", -1), time.Now().Unix(), file_ext)
 
@@ -198,13 +211,15 @@ func main() {
 				HumanSize:human_file_size,
 				HumanContentLength:human_file_size,
 				StartTimeStamp:file.ModTime().Unix(),
-				CompleteTimeStamp:file.ModTime().Unix(),
-				IsDownloaded: true}
+				Duration:-1,
+				Speed:"-",
+				IsDownloaded:true}
 			files_info[filename] = &new_file_info
 		}
 	}
 	//http server
-	http.Handle("/static/", http.StripPrefix("/static", http.FileServer(http.Dir("static/"))))
+	//http.Handle("/static/", http.StripPrefix("/static", http.FileServer(http.Dir("static/"))))
+	http.Handle("/download/", http.StripPrefix("/download", http.FileServer(http.Dir("download"))))
 	http.HandleFunc("/file_download_proxy/files", files_info_handler)
 	http.HandleFunc("/file_download_proxy/file", file_operation_handler)
 	http.HandleFunc("/file_download_proxy/", index_handler)

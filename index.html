@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <!--<link rel="shortcut icon" href="/favicon.ico">-->
+    <title>File Download Proxy</title>
+    <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+    <script src="//cdn.bootcss.com/jquery/3.1.1/jquery.min.js"></script>
+    <script src="//cdn.bootcss.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+</head>
+<body>
+<div class="container">
+    <nav>
+
+    </nav>
+    <div class="alert">
+
+    </div>
+    <form class="form form-inline">
+        <div class="form-group" id="main-form">
+            <input class="form-control" id="url" name="url" placeholder="请输入下载地址">
+            <button type="button" class="btn btn-success" id="create_download_task">下载</button>
+        </div>
+    </form>
+    <p></p>
+    <table class="table">
+        <thead class="files-info-thead">
+        <tr>
+            <th>序号</th>
+            <th>文件名</th>
+            <th>大小</th>
+            <th>速度</th>
+            <th>进度</th>
+            <th>下载地址</th>
+            <th>源</th>
+            <th>开始时间</th>
+            <th>用时</th>
+        </tr>
+        <tbody id="files-info-container"></tbody>
+        </thead>
+    </table>
+    <script>
+        var FILE_API = "http://23.83.230.242/file_download_proxy/file";
+        var FILES_API = FILE_API + "s";
+        var DOWNLOAD_URL = "http://23.83.230.242/download/";
+        function formate_timestamp(timestamp) {
+            return new Date(timestamp * 1000).toISOString().substr(0, 19).replace("T", " ")
+        }
+        function fetch_files_info() {
+            var $container = $("#files-info-container")
+            $container.children().remove();
+            $.ajax({
+                url: FILES_API,
+                method: "GET"
+            }).done(function (data) {
+                console.log(data);
+                var row_counter = 1;
+                for (var file_name in data) {
+                    var file_info = data[file_name];
+                    var template = [];
+                    template.push("<tr>");
+                    template.push("<td>" + row_counter + "</td>");
+                    template.push("<td class='filename'>" + file_info.FileName + "</td>");
+                    template.push("<td class='human_content_length'>" + file_info.HumanSize + " / " + file_info.HumanContentLength + "</td>");
+                    template.push("<td class='download_speed'>" + file_info.Speed + "</td>");
+                    var complete_rate = file_info.ContentLength == 0 ? 0 : file_info.Size / file_info.ContentLength * 100;
+                    if (file_info.CompleteTimeStamp != 0) {
+                        complete_rate = 100
+                    }
+                    template.push("<td class='complete_rate'>" + complete_rate + "%" + "</td>");
+                    if (file_info.Duration != 0) {
+                        template.push("<td class='download_url'><a href='" + DOWNLOAD_URL + file_info.FileName + "'>" + DOWNLOAD_URL + file_info.FileName + "</a></td>");
+                    } else {
+                        template.push("<td>-</td>");
+                    }
+                    template.push("<td>" + file_info.SourceUrl + "</td>");
+                    template.push("<td>" + formate_timestamp(file_info.StartTimeStamp) + "</td>");
+                    var duration = file_info.Duration == -1 ? "-" : file_info.Duration + " 秒";
+                    template.push("<td class='duration'>" + duration + "</td>");
+                    template.push("<td class='delete_file'><button type='button' class='btn btn-default'>&nbsp;删除&nbsp;</button></td>");
+                    template.push("</tr>");
+                    $container.append(template.join(""));
+                    row_counter++
+                }
+                $(".delete_file").on("click", function () {
+                    var filename = $(this).parent().find(".filename").text();
+                    var $self = $(this);
+                    $.ajax({
+                        url: FILE_API + "?filename=" + filename,
+                        method: "DELETE"
+                    }).done(function (data) {
+                        $self.parent().remove()
+                    }).fail(function (data) {
+                        $(".alert").append(data);
+                    })
+
+                })
+
+            }).fail(function (data) {
+                $(".alert").append(data);
+            });
+        }
+        function update_progress() {
+            $.ajax({
+                url: FILES_API,
+                method: "GET"
+            }).done(function (data) {
+            }).fail(function (data) {
+                $(".alert").append(data);
+            })
+        }
+        fetch_files_info();
+        $("#create_download_task").on("click", function () {
+            var url = $("#url").val()
+            if (url != "") {
+                $.ajax({
+                    url: FILE_API,
+                    method: "POST",
+                    data: {
+                        url: url
+                    }
+                }).done(function (data) {
+                    $(".alert").addClass("alert-success").append(data);
+                    setTimeout(function () {
+                        fetch_files_info();
+                    }, 2000);
+                }).fail(function (data) {
+                    $(".alert").addClass("alert-danger").append(data);
+                })
+            }
+        })
+
+    </script>
+</div>
+</body>
+</html>

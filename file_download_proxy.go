@@ -175,9 +175,7 @@ func wget_file(file_info *FileInfo) {
 //utils
 func get_safe_filename(url string) string {
 	_, filename_in_url := path.Split(url)
-	fmt.Printf(filename_in_url)
 	filename := strings.Join(safe_filename_regexp.FindAllString(filename_in_url, -1), "")
-	fmt.Printf(filename)
 	file_ext := path.Ext(filename)
 	return fmt.Sprintf("%s-%v%s", strings.Replace(filename, file_ext, "", -1), time.Now().Unix(), file_ext)
 

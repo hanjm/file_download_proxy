@@ -64,8 +64,8 @@
                     template.push("<td class='filename'>" + file_info.FileName + "</td>");
                     template.push("<td class='human_content_length'>" + file_info.HumanSize + " / " + file_info.HumanContentLength + "</td>");
                     template.push("<td class='download_speed'>" + file_info.Speed + "</td>");
-                    var complete_rate = file_info.ContentLength == 0 ? 0 : file_info.Size / file_info.ContentLength * 100;
-                    if (file_info.CompleteTimeStamp != 0) {
+                    var complete_rate = file_info.ContentLength == 0 ? 0 : Math.ceil(file_info.Size / file_info.ContentLength * 100);
+                    if (file_info.IsDownloaded) {
                         complete_rate = 100
                     }
                     template.push("<td class='complete_rate'>" + complete_rate + "%" + "</td>");

@@ -22,7 +22,7 @@ const DOWNLOAD_DIRNAME = "download"
 var safe_filename_regexp = regexp.MustCompile(`[\w\s.]+`)
 var content_length_regexp = regexp.MustCompile(`[Cc]ontent-[Ll]ength: ?(\d+)`)
 
-var files_info = []*FileInfo{}
+var files_info = map[string]*FileInfo{}
 
 type FileInfo struct {
 	FileName           string
@@ -73,7 +73,7 @@ func file_operation_handler(w http.ResponseWriter, req *http.Request) {
 		new_file_info.SourceUrl = download_url
 		new_file_info.FileName = get_safe_filename(download_url)
 		new_file_info.IsDownloaded = false
-		files_info = append(files_info, new_file_info)
+		files_info[new_file_info.FileName] = new_file_info
 		go wget_file(new_file_info)
 		//for calculate download speed roughly
 		//time.Sleep(1 * time.Second)
@@ -107,8 +107,6 @@ func file_operation_handler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-
-//todo optimize O(N*N)
 func list_files(dirname string) int64 {
 	var file_size int64
 	files, _ := ioutil.ReadDir(dirname)
@@ -116,38 +114,32 @@ func list_files(dirname string) int64 {
 		if file.IsDir() {
 			continue
 		} else {
-			file_size += file.Size()
-			for _, file_info := range files_info {
-				if file.Name() == file_info.FileName {
-					file_info.Size = file.Size()
-					file_info.HumanSize = get_human_size_string(file_info.Size)
-					break
-				}
+			file_info := files_info[file.Name()]
+			if file_info != nil && file_info.Size != file.Size() {
+				file_info.Size = file.Size()
+				file_info.HumanSize = get_human_size_string(file_info.Size)
 			}
+			file_size += file.Size()
 		}
 	}
 	return file_size
 }
 
 func delete_file(filename string) error {
-	index := 0
-	for _, file_info := range files_info {
-		if filename == file_info.FileName {
-			err := os.Remove("download/" + filename)
-			if err != nil {
-				return err
-			}
-			files_info = append(files_info[0:index], files_info[index + 1:]...)
-			return nil
+	file_info := files_info[filename]
+	if file_info != nil {
+		err := os.Remove("download/" + filename)
+		if err != nil {
+			return err
 		}
-		index += 1
+		delete(files_info, filename)
+		return nil
 	}
 	return errors.New("no such file or direcotry")
 
 }
 
 func wget_file(file_info *FileInfo) {
-	log.Printf("Download: length:%s source:%s filename:%s \n", file_info.HumanContentLength, file_info.SourceUrl, file_info.FileName)
 	output, err := exec.Command("curl", "-IL", file_info.SourceUrl).Output()
 	if err != nil {
 		log.Println("error in curl", file_info.SourceUrl)
@@ -158,6 +150,7 @@ func wget_file(file_info *FileInfo) {
 	}
 	//fmt.Printf("%v", content_length)
 	file_info.HumanContentLength = get_human_size_string(file_info.ContentLength)
+	log.Printf("Download: length:%s source:%s filename:%s \n", file_info.HumanContentLength, file_info.SourceUrl, file_info.FileName)
 	file_info.CompleteTimeStamp = time.Now().Unix()
 	cmd := exec.Command("wget", "-O", "download/" + file_info.FileName, file_info.SourceUrl)
 	if err = cmd.Start(); err != nil {
@@ -194,15 +187,20 @@ func main() {
 		if file.IsDir() {
 			continue
 		} else {
+			filename := file.Name()
+			file_size := file.Size()
+			human_file_size := get_human_size_string(file_size)
 			new_file_info := FileInfo{
-				FileName: file.Name(),
-				Size: file.Size(),
-				ContentLength:file.Size(),
+				FileName: filename,
 				SourceUrl: "Local",
+				Size: file_size,
+				ContentLength:file_size,
+				HumanSize:human_file_size,
+				HumanContentLength:human_file_size,
 				StartTimeStamp:file.ModTime().Unix(),
 				CompleteTimeStamp:file.ModTime().Unix(),
 				IsDownloaded: true}
-			files_info = append(files_info, &new_file_info)
+			files_info[filename] = &new_file_info
 		}
 	}
 	//http server

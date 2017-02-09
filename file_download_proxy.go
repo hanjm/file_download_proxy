@@ -114,7 +114,7 @@ func file_operation_handler(w http.ResponseWriter, req *http.Request) {
 		err := delete_file(filename)
 		if err != nil {
 			log.Printf("Delete Error when delete %v:%v", filename, err)
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusNotFound)
 			response, _ = json.Marshal(map[string]string{"Message":err.Error()})
 		} else {
 			response, _ = json.Marshal(map[string]string{"Message":"DELETE OK"})
@@ -170,6 +170,7 @@ func delete_file(filename string) error {
 		delete(files_info, filename)
 		return nil
 	}
+	log.Printf("%v %v", filename, files_info)
 	return errors.New("no such file or direcotry..")
 
 }

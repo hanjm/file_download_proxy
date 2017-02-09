@@ -21,7 +21,7 @@ import (
 const LIMIT_SIZE = 2 * 1024 * 1024 * 1024
 const DOWNLOAD_DIRNAME = "download"
 
-var safe_filename_regexp = regexp.MustCompile(`[\w\s.]+`)
+var safe_filename_regexp = regexp.MustCompile(`[\w\d.]+`)
 var content_length_regexp = regexp.MustCompile(`[Cc]ontent-[Ll]ength: ?(\d+)`)
 
 var files_info = map[string]*FileInfo{}
@@ -29,16 +29,16 @@ var bind_addr string
 var index_data bytes.Buffer
 
 type FileInfo struct {
-	FileName           string
-	SourceUrl          string
-	Size               int64
-	ContentLength      int64
-	HumanSize          string
-	HumanContentLength string
-	StartTimeStamp     int64
-	Duration           int64
-	Speed              string
-	IsDownloaded       bool
+	FileName       string
+	SourceUrl      string
+	Size           int64
+	ContentLength  int64
+	//HumanSize          string
+	//HumanContentLength string
+	StartTimeStamp int64
+	Duration       int64
+	Speed          int64
+	IsDownloaded   bool
 }
 
 func init() {
@@ -136,20 +136,23 @@ func list_files(dirname string) int64 {
 		if file.IsDir() {
 			continue
 		} else {
-			filename := file.Name()
-			file_info := files_info[filename]
-			if file_info != nil && file_info.Size != file.Size() {
+			file_info := files_info[file.Name()]
+			if file_info == nil {
+				continue
+			}
+			if file_info.Size != file.Size() {
 				file_info.Size = file.Size()
-				file_info.HumanSize = get_human_size_string(file_info.Size)
+				//file_info.HumanSize = get_human_size_string(file_info.Size)
 			}
 			if ! file_info.IsDownloaded {
 				duration := time.Now().Unix() - file_info.StartTimeStamp
 				if duration > 0 {
-					file_info.Speed = get_human_size_string(file_info.Size / duration) + "/s"
+					//file_info.Speed = get_human_size_string(file_info.Size / duration) + "/s"
+					file_info.Speed = file_info.Size / duration
 				}
 			} else {
 				file_info.ContentLength = file_info.Size
-				file_info.HumanContentLength = file_info.HumanSize
+				//file_info.HumanContentLength = file_info.HumanSize
 			}
 			file_size += file.Size()
 		}
@@ -193,8 +196,8 @@ func wget_file(file_info *FileInfo) {
 	} else {
 		content_length = get_content_length(file_info.SourceUrl)
 	}
-	file_info.HumanContentLength = get_human_size_string(file_info.ContentLength)
-	log.Printf("Download: length:%s source:%s filename:%s \n", file_info.HumanContentLength, file_info.SourceUrl, file_info.FileName)
+	//file_info.HumanContentLength = get_human_size_string(file_info.ContentLength)
+	log.Printf("Download: length:%s source:%s filename:%s \n", get_human_size_string(file_info.ContentLength), file_info.SourceUrl, file_info.FileName)
 	file_info.StartTimeStamp = time.Now().Unix()
 	cmd := exec.Command("wget", "-O", "download/" + file_info.FileName, file_info.SourceUrl)
 	if err := cmd.Start(); err != nil {
@@ -231,19 +234,19 @@ func main() {
 		if file.IsDir() {
 			continue
 		} else {
-			filename := file.Name()
 			file_size := file.Size()
-			human_file_size := get_human_size_string(file_size)
+			filename := file.Name()
+			//human_file_size := get_human_size_string(file_size)
 			new_file_info := FileInfo{
-				FileName: strings.Trim(filename, " "),
+				FileName: filename,
 				SourceUrl: "Local",
 				Size: file_size,
 				ContentLength:file_size,
-				HumanSize:human_file_size,
-				HumanContentLength:human_file_size,
+				//HumanSize:human_file_size,
+				//HumanContentLength:human_file_size,
 				StartTimeStamp:file.ModTime().Unix(),
-				Duration:-1,
-				Speed:"-",
+				Duration:0,
+				Speed:0,
 				IsDownloaded:true}
 			files_info[filename] = &new_file_info
 		}

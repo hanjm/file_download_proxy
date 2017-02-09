@@ -2,28 +2,104 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <!--<meta name="viewport" content="width=device-width,initial-scale=1">-->
     <!--<link rel="shortcut icon" href="/favicon.ico">-->
-    <title>File Download Proxy</title>
+    <title>文件下载代理服务</title>
+    <link rel="shortcut icon" href="/favicon.ico">
     <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
     <script src="//cdn.bootcss.com/jquery/3.1.1/jquery.min.js"></script>
     <script src="//cdn.bootcss.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <style>
+        .main-container {
+            padding: 20px;
+            /*margin-top: 50px;*/
+        }
+
+        td.complete_rate {
+            padding: 0;
+        }
+
+        td, th {
+            text-align: center;
+        }
+
+        .progress-container {
+            overflow: hidden;
+        }
+
+        .progress-full {
+            width: 60px;
+            height: 60px;
+            border: 5px solid #5cb85c;
+            border-radius: 50%;
+            /*clip: rect(0px, 30px, 60px, 0);*/
+            position: absolute;
+        }
+
+        .progress-right {
+            width: 60px;
+            height: 60px;
+            border: 5px solid #5cb85c;
+            border-radius: 50%;
+            clip: rect(0px, 30px, 60px, 0);
+            transform: rotate(180deg);
+            position: absolute;
+        }
+
+        .progress-wrapper-left {
+            width: 60px;
+            height: 60px;
+            border: 5px solid #ccc;
+            clip: rect(0px, 30px, 60px, 0);
+            border-radius: 50%;
+            position: absolute;
+        }
+
+        .progress-wrapper-right {
+            width: 60px;
+            height: 60px;
+            border: 5px solid #ccc;
+            clip: rect(0px, 30px, 60px, 0);
+            border-radius: 50%;
+            /*transform: rotate(180deg);*/
+            position: absolute;
+        }
+
+        .progress-number {
+            width: 60px;
+            height: 60px;
+            line-height: 60px;
+            text-align: center;
+        }
+    </style>
 </head>
 <body>
-<div class="container">
-    <nav>
-
-    </nav>
-    <div class="alert">
-
-    </div>
-    <form class="form form-inline">
-        <div class="form-group" id="main-form">
-            <input class="form-control" id="url" name="url" placeholder="请输入下载地址">
-            <button type="button" class="btn btn-success" id="create_download_task">下载</button>
+<nav class="navbar navbar-default bg-info">
+    <div class="container-fluid">
+        <div class="navbar-header">
+            <a class="navbar-brand" href="#"><span class="glyphicon glyphicon-cloud-download">&nbsp;</span>File Download
+                Proxy</a>
         </div>
-    </form>
-    <p></p>
+        <ul class="nav navbar-nav navbar-right">
+            <li><a href="https://github.com/hanjm/file_download_proxy" target="_blank">
+                <span class="glyphicon glyphicon-heart"></span>&nbsp;View Source (Golang)</a></li>
+        </ul>
+    </div>
+</nav>
+<div class="main-container">
+    <div class="alert">
+    </div>
+    <div>
+        <form class="form form-horizontal">
+            <div class="form-group col-sm-12" id="main-form">
+                <div class="col-sm-10">
+                    <input class="form-control" id="url" name="url" placeholder="请输入下载地址">
+                </div>
+                <button type="button" class="btn btn-success col-sm-2" id="create_download_task">下载</button>
+            </div>
+        </form>
+    </div>
+    <p>&nbsp;</p>
     <table class="table">
         <thead class="files-info-thead">
         <tr>
@@ -37,82 +113,123 @@
             <th>开始时间</th>
             <th>用时</th>
         </tr>
-        <tbody id="files-info-container"></tbody>
         </thead>
+        <tbody id="files-info-container"></tbody>
     </table>
     <script>
-        var FILE_API = "http://23.83.230.242/file_download_proxy/file";
+        var FILE_API = "http://{{ .Bind_addr }}/file_download_proxy/file";
         var FILES_API = FILE_API + "s";
-        var DOWNLOAD_URL = "http://23.83.230.242/download/";
+        var DOWNLOAD_URL = "http://{{ .Bind_addr }}/download/";
         function formate_timestamp(timestamp) {
             return new Date(timestamp * 1000).toISOString().substr(0, 19).replace("T", " ")
         }
         function fetch_files_info() {
-            var $container = $("#files-info-container")
-            $container.children().remove();
+            var $container = $("#files-info-container");
+            var length = $container.children('tr').length;
             $.ajax({
                 url: FILES_API,
                 method: "GET"
             }).done(function (data) {
-                console.log(data);
+//                console.log(data);
                 var row_counter = 1;
                 for (var file_name in data) {
                     var file_info = data[file_name];
-                    var template = [];
-                    template.push("<tr>");
-                    template.push("<td>" + row_counter + "</td>");
-                    template.push("<td class='filename'>" + file_info.FileName + "</td>");
-                    template.push("<td class='human_content_length'>" + file_info.HumanSize + " / " + file_info.HumanContentLength + "</td>");
-                    template.push("<td class='download_speed'>" + file_info.Speed + "</td>");
+                    var td_size = file_info.HumanSize + " / " + file_info.HumanContentLength;
                     var complete_rate = file_info.ContentLength == 0 ? 0 : Math.ceil(file_info.Size / file_info.ContentLength * 100);
                     if (file_info.IsDownloaded) {
                         complete_rate = 100
                     }
-                    template.push("<td class='complete_rate'>" + complete_rate + "%" + "</td>");
+                    var td_complete_rate = "<div class='progress-container'></div><div class='progress-full'></div><div class='progress-wrapper-left'></div><div class='progress-wrapper-right'></div><div class='progress-right'></div><div class='progress-number'>" + complete_rate + "%</div></div>";
+                    var td_download_url = "-";
                     if (file_info.Duration != 0) {
-                        template.push("<td class='download_url'><a href='" + DOWNLOAD_URL + file_info.FileName + "'>" + DOWNLOAD_URL + file_info.FileName + "</a></td>");
-                    } else {
-                        template.push("<td>-</td>");
+                        td_download_url = "<a href='" + DOWNLOAD_URL + file_info.FileName + "'>" + DOWNLOAD_URL + file_info.FileName + "</a>";
                     }
-                    template.push("<td>" + file_info.SourceUrl + "</td>");
-                    template.push("<td>" + formate_timestamp(file_info.StartTimeStamp) + "</td>");
-                    var duration = file_info.Duration == -1 ? "-" : file_info.Duration + " 秒";
-                    template.push("<td class='duration'>" + duration + "</td>");
-                    template.push("<td class='delete_file'><button type='button' class='btn btn-default'>&nbsp;删除&nbsp;</button></td>");
-                    template.push("</tr>");
-                    $container.append(template.join(""));
-                    row_counter++
+                    var td_start_time = formate_timestamp(file_info.StartTimeStamp);
+                    var td_duration = file_info.Duration == -1 ? "-" : file_info.Duration + " 秒";
+//                    仅更新表格数据不动DOM node
+                    var $tr;
+                    if (row_counter <= length) {
+                        $tr = $($container.children('tr')[row_counter - 1]);
+                        if (!file_info.IsDownloaded) {
+                            $tr.addClass("bg-info");
+                        } else {
+                            $tr.removeClass("bg-info");
+                        }
+                        $tr.children('.line_num').text(row_counter);
+                        $tr.children('.filename').text(file_info.FileName);
+                        $tr.children('.size').text(td_size);
+                        $tr.children('.download_speed').text(file_info.Speed);
+                        $tr.children('.complete_rate').find('.progress-number').text(complete_rate + "%");
+                        $tr.children('.human_size').text(td_size);
+                        $tr.children('.download_url').html(td_download_url);
+                        $tr.children('.source_url').text(file_info.SourceUrl);
+                        $tr.children('.start_time').text(td_start_time);
+                        $tr.children('.duration').text(td_duration);
+                    } else {
+//                        增加tr更新表格数据
+                        var template = [];
+                        if (!file_info.IsDownloaded) {
+                            template.push("<tr class='bg-info'>");
+                        } else {
+                            template.push("<tr>");
+                        }
+                        template.push("<td class='line_num'>" + row_counter + "</td>");
+                        template.push("<td class='filename'>" + file_info.FileName + "</td>");
+                        template.push("<td class='size'>" + td_size + "</td>");
+                        template.push("<td class='download_speed'>" + file_info.Speed + "</td>");
+                        template.push("<td class='complete_rate'>" + td_complete_rate + "</td>");
+                        template.push("<td class='download_url'>" + td_download_url + "</td>");
+                        template.push("<td class='source_url'>" + file_info.SourceUrl + "</td>");
+                        template.push("<td class='start_time'>" + td_start_time + "</td>");
+                        template.push("<td class='duration'>" + td_duration + "</td>");
+                        template.push("<td class='delete_file'><button type='button' class='btn btn-default'>&nbsp;删除&nbsp;</button></td>");
+                        template.push("</tr>");
+                        $container.append(template.join(""));
+                        $tr = $($container.children('tr')[row_counter - 1]);
+//                        绑定删除事件
+                        $(".delete_file").on("click", function () {
+                            var filename = $(this).parent().find(".filename").text();
+                            var $self = $(this);
+                            $.ajax({
+                                url: FILE_API + "?filename=" + filename,
+                                method: "DELETE"
+                            }).done(function (data) {
+                                $self.parent().remove()
+                            }).fail(function (data) {
+                                $(".alert").append(data);
+                            })
+                        })
+                    }
+                    row_counter++;
+//                    更新进度环
+                    var $progress = $tr.children('.complete_rate');
+                    var wrapper_left_rotate_deg = 0;
+                    var wrapper_right_rotate_deg = 0;
+                    if (complete_rate <= 50) {
+                        wrapper_right_rotate_deg = 180 + complete_rate / 50 * 180;
+                        $progress.find(".progress-right").hide();
+                        $progress.find(".progress-wrapper-right").show();
+                    }
+                    else {
+                        wrapper_left_rotate_deg = (complete_rate - 50) / 50 * 180;
+                        $progress.find(".progress-right").show();
+                        $progress.find(".progress-wrapper-right").hide();
+                    }
+                    $progress.find(".progress-wrapper-left").css("transform", "rotate(" + wrapper_left_rotate_deg + "deg)");
+                    $progress.find(".progress-wrapper-right").css("transform", "rotate(" + wrapper_right_rotate_deg + "deg)");
                 }
-                $(".delete_file").on("click", function () {
-                    var filename = $(this).parent().find(".filename").text();
-                    var $self = $(this);
-                    $.ajax({
-                        url: FILE_API + "?filename=" + filename,
-                        method: "DELETE"
-                    }).done(function (data) {
-                        $self.parent().remove()
-                    }).fail(function (data) {
-                        $(".alert").append(data);
-                    })
-
-                })
-
             }).fail(function (data) {
                 $(".alert").append(data);
             });
         }
-        function update_progress() {
-            $.ajax({
-                url: FILES_API,
-                method: "GET"
-            }).done(function (data) {
-            }).fail(function (data) {
-                $(".alert").append(data);
-            })
-        }
         fetch_files_info();
+        setInterval(function () {
+            fetch_files_info();
+        }, 5000);
         $("#create_download_task").on("click", function () {
-            var url = $("#url").val()
+            var $url_input = $("#url")
+            var url = $url_input.val();
+            $url_input.val("");
             if (url != "") {
                 $.ajax({
                     url: FILE_API,
@@ -122,16 +239,13 @@
                     }
                 }).done(function (data) {
                     $(".alert").addClass("alert-success").append(data);
-                    setTimeout(function () {
-                        fetch_files_info();
-                    }, 2000);
                 }).fail(function (data) {
                     $(".alert").addClass("alert-danger").append(data);
                 })
             }
-        })
-
+        });
     </script>
+
 </div>
 </body>
 </html>

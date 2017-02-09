@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 	"errors"
+	"html/template"
+	"bytes"
 )
 //2GB
 const LIMIT_SIZE = 2 * 1024 * 1024 * 1024
@@ -23,6 +25,8 @@ var safe_filename_regexp = regexp.MustCompile(`[\w\s.]+`)
 var content_length_regexp = regexp.MustCompile(`[Cc]ontent-[Ll]ength: ?(\d+)`)
 
 var files_info = map[string]*FileInfo{}
+var bind_addr string
+var index_data bytes.Buffer
 
 type FileInfo struct {
 	FileName           string
@@ -36,9 +40,21 @@ type FileInfo struct {
 	Speed              string
 	IsDownloaded       bool
 }
-//index handler
-func index_handler(w http.ResponseWriter, req *http.Request) {
-	http.ServeFile(w, req, "index.html")
+
+func init() {
+	//parse addr:port args
+	if len(os.Args) > 1 {
+		bind_addr = os.Args[1]
+	} else {
+		panic("\nUsage: go run file_download_proxy.go addr:port\nExample:go run file_download_proxy.go 127.0.0.1:8000")
+	}
+	//cache index template
+	index_template, _ := template.ParseFiles("index.html")
+	type Context struct {
+		Bind_addr string
+	}
+	context := Context{Bind_addr:bind_addr}
+	index_template.Execute(&index_data, context)
 }
 //list files handler
 func files_info_handler(w http.ResponseWriter, req *http.Request) {
@@ -67,6 +83,7 @@ func file_operation_handler(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		log.Printf("Download %v", filename)
 		//http.ServeFile(w, req, "download/" + filename)
 		http.Redirect(w, req, "/download/" + filename, http.StatusTemporaryRedirect)
 	case "POST":
@@ -119,7 +136,8 @@ func list_files(dirname string) int64 {
 		if file.IsDir() {
 			continue
 		} else {
-			file_info := files_info[file.Name()]
+			filename := file.Name()
+			file_info := files_info[filename]
 			if file_info != nil && file_info.Size != file.Size() {
 				file_info.Size = file.Size()
 				file_info.HumanSize = get_human_size_string(file_info.Size)
@@ -127,8 +145,11 @@ func list_files(dirname string) int64 {
 			if ! file_info.IsDownloaded {
 				duration := time.Now().Unix() - file_info.StartTimeStamp
 				if duration > 0 {
-					file_info.Speed = get_human_size_string(file_info.Size / duration) + "/S"
+					file_info.Speed = get_human_size_string(file_info.Size / duration) + "/s"
 				}
+			} else {
+				file_info.ContentLength = file_info.Size
+				file_info.HumanContentLength = file_info.HumanSize
 			}
 			file_size += file.Size()
 		}
@@ -146,25 +167,37 @@ func delete_file(filename string) error {
 		delete(files_info, filename)
 		return nil
 	}
-	return errors.New("no such file or direcotry")
+	return errors.New("no such file or direcotry..")
 
 }
-
-func wget_file(file_info *FileInfo) {
-	output, err := exec.Command("curl", "-IL", file_info.SourceUrl).Output()
+func get_content_length(url string) int64 {
+	output, err := exec.Command("curl", "-IL", url).Output()
 	if err != nil {
-		log.Println("error in curl:", file_info.SourceUrl, err.Error())
+		log.Println("error in curl:", url, err.Error())
 	}
-	content_length := content_length_regexp.FindAllStringSubmatch(string(output), -1)
-	if content_length != nil {
-		file_info.ContentLength, _ = strconv.ParseInt(content_length[len(content_length) - 1][1], 10, 64)
+	//log.Printf("%v", string(output))
+	var content_length int64
+	content_lengths := content_length_regexp.FindAllStringSubmatch(string(output), -1)
+	if content_lengths != nil {
+		content_length, _ = strconv.ParseInt(content_lengths[len(content_lengths) - 1][1], 10, 64)
+	} else {
+		content_length = 0
 	}
-	//fmt.Printf("%v", content_length)
+	return content_length
+}
+func wget_file(file_info *FileInfo) {
+	//一些资源是动态生成的,请求第一次是chuncked stream,Header不带Content-Length,第二次请求就有Content-length
+	content_length := get_content_length(file_info.SourceUrl)
+	if content_length != 0 {
+		file_info.ContentLength = content_length
+	} else {
+		content_length = get_content_length(file_info.SourceUrl)
+	}
 	file_info.HumanContentLength = get_human_size_string(file_info.ContentLength)
 	log.Printf("Download: length:%s source:%s filename:%s \n", file_info.HumanContentLength, file_info.SourceUrl, file_info.FileName)
 	file_info.StartTimeStamp = time.Now().Unix()
 	cmd := exec.Command("wget", "-O", "download/" + file_info.FileName, file_info.SourceUrl)
-	if err = cmd.Start(); err != nil {
+	if err := cmd.Start(); err != nil {
 		log.Println("error in wget", file_info.SourceUrl)
 	}
 	cmd.Wait()
@@ -202,7 +235,7 @@ func main() {
 			file_size := file.Size()
 			human_file_size := get_human_size_string(file_size)
 			new_file_info := FileInfo{
-				FileName: filename,
+				FileName: strings.Trim(filename, " "),
 				SourceUrl: "Local",
 				Size: file_size,
 				ContentLength:file_size,
@@ -220,14 +253,12 @@ func main() {
 	http.Handle("/download/", http.StripPrefix("/download", http.FileServer(http.Dir("download"))))
 	http.HandleFunc("/file_download_proxy/files", files_info_handler)
 	http.HandleFunc("/file_download_proxy/file", file_operation_handler)
-	http.HandleFunc("/file_download_proxy/", index_handler)
-	//parse addr:port args
-	var bind_addr string
-	if len(os.Args) > 1 {
-		bind_addr = os.Args[1]
-	} else {
-		panic("\nUsage: go run file_download_proxy.go addr:port\nExample:go run file_download_proxy.go :80")
-	}
+	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, req *http.Request) {
+		http.ServeFile(w, req, "favicon.ico")
+	})
+	http.HandleFunc("/file_download_proxy/", func(w http.ResponseWriter, req *http.Request) {
+		w.Write(index_data.Bytes())
+	})
 	log.Printf("service start at %v", bind_addr)
 	log.Fatal(http.ListenAndServe(bind_addr, nil))
 }

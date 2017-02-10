@@ -165,6 +165,7 @@
                 var row_counter = 1;
                 for (var file_name in data) {
                     var file_info = data[file_name];
+
                     var td_size = get_human_read_size(file_info.Size) + " / " + get_human_read_size(file_info.ContentLength);
                     var td_download_speed = get_human_read_size(file_info.Speed) + "/s";
                     var complete_rate = file_info.ContentLength == 0 ? 0 : Math.ceil(file_info.Size / file_info.ContentLength * 100);
@@ -176,6 +177,7 @@
                     if (file_info.Duration != 0) {
                         td_download_url = "<a href='" + DOWNLOAD_URL + file_info.FileName + "'>" + DOWNLOAD_URL + file_info.FileName + "</a>";
                     }
+                    var td_source_url = file_info.SourceUrl.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
                     var td_start_time = formate_timestamp(file_info.StartTimeStamp);
                     var td_duration = file_info.IsDownloaded ? file_info.Duration + " 秒" : "-";
                     var td_start_timestamp = file_info.StartTimeStamp * 1000;
@@ -194,7 +196,7 @@
                         $tr.children('.download_speed').text(td_download_speed);
                         $tr.children('.complete_rate').find('.progress-number').text(complete_rate + "%");
                         $tr.children('.download_url').html(td_download_url);
-                        $tr.children('.source_url').text(file_info.SourceUrl);
+                        $tr.children('.source_url').text(td_source_url);
                         $tr.children('.start_time').text(td_start_time);
                         $tr.children('.duration').text(td_duration);
 
@@ -215,7 +217,7 @@
                         template.push("<td class='download_speed'>" + td_download_speed + "</td>");
                         template.push("<td class='complete_rate'>" + td_complete_rate + "</td>");
                         template.push("<td class='download_url'>" + td_download_url + "</td>");
-                        template.push("<td class='source_url'>" + file_info.SourceUrl + "</td>");
+                        template.push("<td class='source_url'>" + td_source_url + "</td>");
                         template.push("<td class='start_time'>" + td_start_time + "</td>");
                         template.push("<td class='duration'>" + td_duration + "</td>");
                         template.push("<td class='delete_file'><button type='button' class='btn btn-default'>&nbsp;删除&nbsp;</button></td>");
@@ -273,18 +275,18 @@
 
         setInterval(function () {
             $("tr.bg-info").each(
-                    function () {
-                        var $this = $(this);
-                        var content_length = parseInt($this.children(".content_length").text());
-                        var start_timestamp = parseInt($this.children(".start_timestamp").text());
-                        var speed = parseInt($this.children(".speed").text());
-                        var rate = parseInt($this.find("div.progress-number").text().trim("%"));
-                        var new_rate = (Date.now() - start_timestamp) / 1000 * speed / content_length * 100;
+                function () {
+                    var $this = $(this);
+                    var content_length = parseInt($this.children(".content_length").text());
+                    var start_timestamp = parseInt($this.children(".start_timestamp").text());
+                    var speed = parseInt($this.children(".speed").text());
+                    var rate = parseInt($this.find("div.progress-number").text().trim("%"));
+                    var new_rate = (Date.now() - start_timestamp) / 1000 * speed / content_length * 100;
 //                        console.log(content_length, start_timestamp, rate, new_rate);
-                        if (new_rate > rate && new_rate < 100) {
-                            update_circular_progress($this, new_rate)
-                        }
+                    if (new_rate > rate && new_rate < 100) {
+                        update_circular_progress($this, new_rate)
                     }
+                }
             )
         }, 500)
     </script>

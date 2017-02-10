@@ -17,8 +17,8 @@ import (
 	"html/template"
 	"bytes"
 )
-//2GB
-const LIMIT_SIZE = 2 * 1024 * 1024 * 1024
+//3GB limit
+const LIMIT_SIZE = 3 * 1024 * 1024 * 1024
 const DOWNLOAD_DIRNAME = "download"
 
 var safe_filename_regexp = regexp.MustCompile(`[\w\d.]+`)
@@ -199,6 +199,10 @@ func wget_file(file_info *FileInfo) {
 	}
 	//file_info.HumanContentLength = get_human_size_string(file_info.ContentLength)
 	log.Printf("Download: length:%s source:%s filename:%s \n", get_human_size_string(file_info.ContentLength), file_info.SourceUrl, file_info.FileName)
+	if content_length > LIMIT_SIZE {
+		log.Println("the content length of file is too big")
+		return
+	}
 	file_info.StartTimeStamp = time.Now().Unix()
 	cmd := exec.Command("wget", "-O", "download/" + file_info.FileName, file_info.SourceUrl)
 	if err := cmd.Start(); err != nil {

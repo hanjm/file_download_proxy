@@ -16,6 +16,6 @@ Example:go run file_download_proxy.go 127.0.0.1:8000
 ```
 然后访问: http://127.0.0.1:8000/file_download_proxy/
 
-update:
-增加Content-Length<3G限制
+# 注意事项
+1. 增加Content-Length<3G限制
 https://github.com/hanjm/file_download_proxy/blob/master/file_download_proxy.go#L202-L205

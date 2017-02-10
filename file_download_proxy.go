@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"html/template"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -13,10 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"errors"
-	"html/template"
-	"bytes"
 )
+
 //3GB limit
 const LIMIT_SIZE = 3 * 1024 * 1024 * 1024
 const DOWNLOAD_DIRNAME = "download"
@@ -29,10 +30,10 @@ var bind_addr string
 var index_data bytes.Buffer
 
 type FileInfo struct {
-	FileName       string
-	SourceUrl      string
-	Size           int64
-	ContentLength  int64
+	FileName      string
+	SourceUrl     string
+	Size          int64
+	ContentLength int64
 	//HumanSize          string
 	//HumanContentLength string
 	StartTimeStamp int64
@@ -54,9 +55,10 @@ func init() {
 	type Context struct {
 		Bind_addr string
 	}
-	context := Context{Bind_addr:bind_addr}
+	context := Context{Bind_addr: bind_addr}
 	index_template.Execute(&index_data, context)
 }
+
 //list files handler
 func files_info_handler(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
@@ -65,7 +67,7 @@ func files_info_handler(w http.ResponseWriter, req *http.Request) {
 		files_size := list_files(DOWNLOAD_DIRNAME)
 		if files_size > LIMIT_SIZE {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			response, _ = json.Marshal(map[string]interface{}{"Message":"to many files in server, please delete some files", "FilesSize":files_size})
+			response, _ = json.Marshal(map[string]interface{}{"Message": "to many files in server, please delete some files", "FilesSize": files_size})
 		} else {
 			response, _ = json.Marshal(files_info)
 		}
@@ -75,6 +77,7 @@ func files_info_handler(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 }
+
 //file_operation_handler handle file download(get) / create download task(post) / delete_file(delete)
 func file_operation_handler(w http.ResponseWriter, req *http.Request) {
 	filename := req.URL.Query().Get("filename")
@@ -86,7 +89,7 @@ func file_operation_handler(w http.ResponseWriter, req *http.Request) {
 		}
 		log.Printf("Download %v", filename)
 		//http.ServeFile(w, req, "download/" + filename)
-		http.Redirect(w, req, "/download/" + filename, http.StatusTemporaryRedirect)
+		http.Redirect(w, req, "/download/"+filename, http.StatusTemporaryRedirect)
 	case "POST":
 		download_url := req.PostFormValue("url")
 		if download_url == "" {
@@ -103,7 +106,7 @@ func file_operation_handler(w http.ResponseWriter, req *http.Request) {
 		//http.Redirect(w, req, "/file_download_proxy", 301)
 		w.WriteHeader(http.StatusCreated)
 		w.Header().Set("Content-Type", "json")
-		response, _ := json.Marshal(map[string]string{"Message":"CREATE OK"})
+		response, _ := json.Marshal(map[string]string{"Message": "CREATE OK"})
 		w.Write(response)
 	case "DELETE":
 		log.Printf("Delete %v", filename)
@@ -116,9 +119,9 @@ func file_operation_handler(w http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			log.Printf("Delete Error when delete %v:%v", filename, err)
 			w.WriteHeader(http.StatusNotFound)
-			response, _ = json.Marshal(map[string]string{"Message":err.Error()})
+			response, _ = json.Marshal(map[string]string{"Message": err.Error()})
 		} else {
-			response, _ = json.Marshal(map[string]string{"Message":"DELETE OK"})
+			response, _ = json.Marshal(map[string]string{"Message": "DELETE OK"})
 		}
 
 		w.Header().Set("Content-Type", "json")
@@ -145,7 +148,7 @@ func list_files(dirname string) int64 {
 				file_info.Size = file.Size()
 				//file_info.HumanSize = get_human_size_string(file_info.Size)
 			}
-			if ! file_info.IsDownloaded {
+			if !file_info.IsDownloaded {
 				duration := time.Now().Unix() - file_info.StartTimeStamp
 				if duration > 0 {
 					//file_info.Speed = get_human_size_string(file_info.Size / duration) + "/s"
@@ -186,7 +189,7 @@ func get_content_length(url string) (int64, error) {
 	var content_length int64
 	content_lengths := content_length_regexp.FindAllStringSubmatch(string(output), -1)
 	if content_lengths != nil {
-		content_length, _ = strconv.ParseInt(content_lengths[len(content_lengths) - 1][1], 10, 64)
+		content_length, _ = strconv.ParseInt(content_lengths[len(content_lengths)-1][1], 10, 64)
 	} else {
 		content_length = 0
 	}
@@ -216,7 +219,7 @@ func wget_file(file_info *FileInfo) {
 		return
 	}
 	file_info.StartTimeStamp = time.Now().Unix()
-	cmd := exec.Command("wget", "-O", "download/" + file_info.FileName, source_url)
+	cmd := exec.Command("wget", "-O", "download/"+file_info.FileName, source_url)
 	if err := cmd.Start(); err != nil {
 		log.Println("wget error", err.Error(), source_url)
 		file_info.IsError = true
@@ -233,7 +236,7 @@ func get_safe_filename(url string) string {
 	_, filename_in_url := path.Split(url)
 	filename := strings.Join(safe_filename_regexp.FindAllString(filename_in_url, -1), "")
 	if len_of_filename := len(filename); len_of_filename > 50 {
-		filename = filename[len_of_filename - 50:len_of_filename]
+		filename = filename[len_of_filename-50 : len_of_filename]
 	}
 	file_ext := path.Ext(filename)
 	return fmt.Sprintf("%s-%v%s", strings.Replace(filename, file_ext, "", -1), time.Now().Unix(), file_ext)
@@ -249,6 +252,10 @@ func get_human_size_string(byte_size int64) string {
 	return fmt.Sprintf("%.2f %s", byte_size_float, units[index])
 }
 
+func run_server(w http.ResponseWriter, req *http.Request) {
+	w.Write(index_data.Bytes())
+}
+
 func main() {
 	//make dir and init
 	os.Mkdir("download", 0777)
@@ -261,17 +268,17 @@ func main() {
 			filename := file.Name()
 			//human_file_size := get_human_size_string(file_size)
 			new_file_info := FileInfo{
-				FileName: filename,
-				SourceUrl: "Local",
-				Size: file_size,
-				ContentLength:file_size,
+				FileName:      filename,
+				SourceUrl:     "Local",
+				Size:          file_size,
+				ContentLength: file_size,
 				//HumanSize:human_file_size,
 				//HumanContentLength:human_file_size,
-				StartTimeStamp:file.ModTime().Unix(),
-				Duration:0,
-				Speed:0,
-				IsDownloaded:true,
-				IsError:false}
+				StartTimeStamp: file.ModTime().Unix(),
+				Duration:       0,
+				Speed:          0,
+				IsDownloaded:   true,
+				IsError:        false}
 			files_info[filename] = &new_file_info
 		}
 	}
@@ -283,9 +290,8 @@ func main() {
 	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, req *http.Request) {
 		http.ServeFile(w, req, "favicon.ico")
 	})
-	http.HandleFunc("/file_download_proxy/", func(w http.ResponseWriter, req *http.Request) {
-		w.Write(index_data.Bytes())
-	})
+	http.HandleFunc("/", run_server)
+	http.HandleFunc("/file_download_proxy/", run_server)
 	log.Printf("service start at %v", bind_addr)
 	log.Fatal(http.ListenAndServe(bind_addr, nil))
 }

@@ -2,7 +2,7 @@
 文件下载代理服务
 ------------
 - 使用Golang net/http 包实现
-- 显示下载速度 进度环
+- 显示下载速度 css进度环
 
 Demo:http://23.83.230.242/file_download_proxy/
 ```shell

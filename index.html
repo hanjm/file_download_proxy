@@ -125,7 +125,7 @@
         var FILE_API = "http://{{ .Bind_addr }}/file_download_proxy/file";
         var FILES_API = FILE_API + "s";
         var DOWNLOAD_URL = "http://{{ .Bind_addr }}/download/";
-        var HUMAN_READ_UNIT = ["B", "KB", "MB", "GB"]
+        var HUMAN_READ_UNIT = ["B", "KB", "MB", "GB", "TB", "EB"];
         function formate_timestamp(timestamp) {
             return new Date(timestamp * 1000 + 28800000).toISOString().substr(0, 19).replace("T", " ")
         }

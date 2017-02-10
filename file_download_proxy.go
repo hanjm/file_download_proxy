@@ -201,6 +201,7 @@ func wget_file(file_info *FileInfo) {
 	log.Printf("Download: length:%s source:%s filename:%s \n", get_human_size_string(file_info.ContentLength), file_info.SourceUrl, file_info.FileName)
 	if content_length > LIMIT_SIZE {
 		log.Println("the content length of file is too big")
+		delete(files_info, file_info.FileName)
 		return
 	}
 	file_info.StartTimeStamp = time.Now().Unix()
@@ -222,7 +223,7 @@ func get_safe_filename(url string) string {
 
 }
 func get_human_size_string(byte_size int64) string {
-	units := []string{"B", "KB", "MB", "GB"}
+	units := []string{"B", "KB", "MB", "GB", "TB", "EB"}
 	index := 0
 	byte_size_float := float64(byte_size)
 	for ; byte_size_float > 1024; index += 1 {

@@ -39,6 +39,7 @@ type FileInfo struct {
 	Duration       int64
 	Speed          int64
 	IsDownloaded   bool
+	IsError        bool
 }
 
 func init() {
@@ -163,9 +164,11 @@ func list_files(dirname string) int64 {
 func delete_file(filename string) error {
 	file_info := files_info[filename]
 	if file_info != nil {
-		err := os.Remove("download/" + filename)
-		if err != nil {
-			return err
+		if !file_info.IsError {
+			err := os.Remove("download/" + filename)
+			if err != nil {
+				return err
+			}
 		}
 		delete(files_info, filename)
 		return nil
@@ -174,10 +177,10 @@ func delete_file(filename string) error {
 	return errors.New("no such file or direcotry..")
 
 }
-func get_content_length(url string) int64 {
+func get_content_length(url string) (int64, error) {
 	output, err := exec.Command("curl", "-IL", url).Output()
 	if err != nil {
-		log.Println("error in curl:", url, err.Error())
+		return 0, err
 	}
 	//log.Printf("%v", string(output))
 	var content_length int64
@@ -187,27 +190,38 @@ func get_content_length(url string) int64 {
 	} else {
 		content_length = 0
 	}
-	return content_length
+	return content_length, nil
 }
 func wget_file(file_info *FileInfo) {
 	//一些资源是动态生成的,请求第一次是chuncked stream,Header不带Content-Length,第二次请求就有Content-length
-	content_length := get_content_length(file_info.SourceUrl)
+	source_url := file_info.SourceUrl
+	content_length, err := get_content_length(source_url)
 	if content_length != 0 {
 		file_info.ContentLength = content_length
 	} else {
-		content_length = get_content_length(file_info.SourceUrl)
+		content_length, err = get_content_length(source_url)
+	}
+	if err != nil {
+		log.Println("curl error:", err.Error(), source_url)
+		file_info.IsError = true
+		file_info.SourceUrl = fmt.Sprintf("curl error:%v source_url:%v", err, source_url)
+		return
 	}
 	//file_info.HumanContentLength = get_human_size_string(file_info.ContentLength)
-	log.Printf("Download: length:%s source:%s filename:%s \n", get_human_size_string(file_info.ContentLength), file_info.SourceUrl, file_info.FileName)
+	log.Printf("Create Download: length:%s source:%s filename:%s \n", get_human_size_string(file_info.ContentLength), source_url, file_info.FileName)
 	if content_length > LIMIT_SIZE {
-		log.Println("the content length of file is too big")
-		delete(files_info, file_info.FileName)
+		log.Println("The content length of file is too big")
+		file_info.IsError = true
+		file_info.SourceUrl = fmt.Sprintf("The content length of source_url is too big :%v", source_url)
 		return
 	}
 	file_info.StartTimeStamp = time.Now().Unix()
-	cmd := exec.Command("wget", "-O", "download/" + file_info.FileName, file_info.SourceUrl)
+	cmd := exec.Command("wget", "-O", "download/" + file_info.FileName, source_url)
 	if err := cmd.Start(); err != nil {
-		log.Println("error in wget", file_info.SourceUrl)
+		log.Println("wget error", err.Error(), source_url)
+		file_info.IsError = true
+		file_info.SourceUrl = fmt.Sprintf("wget error:%v source_url:%v", err, source_url)
+		return
 	}
 	cmd.Wait()
 	file_info.Duration = time.Now().Unix() - file_info.StartTimeStamp
@@ -256,7 +270,8 @@ func main() {
 				StartTimeStamp:file.ModTime().Unix(),
 				Duration:0,
 				Speed:0,
-				IsDownloaded:true}
+				IsDownloaded:true,
+				IsError:false}
 			files_info[filename] = &new_file_info
 		}
 	}

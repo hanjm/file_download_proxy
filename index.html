@@ -165,7 +165,6 @@
                 var row_counter = 1;
                 for (var file_name in data) {
                     var file_info = data[file_name];
-
                     var td_size = get_human_read_size(file_info.Size) + " / " + get_human_read_size(file_info.ContentLength);
                     var td_download_speed = get_human_read_size(file_info.Speed) + "/s";
                     var complete_rate = file_info.ContentLength == 0 ? 0 : Math.ceil(file_info.Size / file_info.ContentLength * 100);
@@ -185,10 +184,14 @@
                     var $tr;
                     if (row_counter <= length) {
                         $tr = $($container.children('tr')[row_counter - 1]);
-                        if (!file_info.IsDownloaded) {
-                            $tr.addClass("bg-info");
+                        if (file_info.IsDownloaded) {
+                            $tr.removeClass("bg-info").removeClass("bg-danger");
                         } else {
-                            $tr.removeClass("bg-info");
+                            if (file_info.IsError) {
+                                $tr.addClass("bg-danger").removeClass("bg-info");
+                            } else {
+                                $tr.addClass("bg-info").removeClass("bg-danger");
+                            }
                         }
                         $tr.children('.line_num').text(row_counter);
                         $tr.children('.filename').text(file_info.FileName);
@@ -206,10 +209,15 @@
                     } else {
 //                        增加tr更新表格数据
                         var template = [];
-                        if (!file_info.IsDownloaded) {
-                            template.push("<tr class='bg-info'>");
-                        } else {
+                        if (file_info.IsDownloaded) {
                             template.push("<tr>");
+                        } else {
+                            if (file_info.IsError) {
+                                template.push("<tr class='bg-danger'>");
+                            }
+                            else {
+                                template.push("<tr class='bg-info'>");
+                            }
                         }
                         template.push("<td class='line_num'>" + row_counter + "</td>");
                         template.push("<td class='filename'>" + file_info.FileName + "</td>");
@@ -256,6 +264,10 @@
                 $(".alert").append(data);
             });
         }
+        fetch_files_info();
+        var fresh_interval = setInterval(function () {
+            fetch_files_info();
+        }, 5000);
         //        输入框内回车阻止提交form并点击下载
         $("#url-input-form").on("submit", function (e) {
             e.preventDefaultEvent;
@@ -274,16 +286,17 @@
                     }
                 }).done(function (data) {
                     $(".alert").addClass("alert-success").append(data);
+//                    添加任务成功后立即刷新
+                    clearInterval(fresh_interval);
+                    fetch_files_info();
+                    fresh_interval = setInterval(function () {
+                        fetch_files_info();
+                    }, 5000);
                 }).fail(function (data) {
                     $(".alert").addClass("alert-danger").append(data);
                 })
             }
         });
-        fetch_files_info();
-        setInterval(function () {
-            fetch_files_info();
-        }, 5000);
-
         setInterval(function () {
             $("tr.bg-info").each(
                     function () {

@@ -247,6 +247,11 @@
                         })
                     })
                 }
+                if (length > row_counter) {
+                    $($container.children('tr').slice(row_counter-1)).each(function () {
+                        $(this).remove();
+                    })
+                }
             }).fail(function (data) {
                 $(".alert").append(data);
             });

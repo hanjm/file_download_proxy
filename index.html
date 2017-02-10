@@ -174,7 +174,7 @@
                     }
                     var td_complete_rate = "<div class='progress-container'></div><div class='progress-full'></div><div class='progress-wrapper-left'></div><div class='progress-wrapper-right'></div><div class='progress-right'></div><div class='progress-number'>" + complete_rate + "%</div></div>";
                     var td_download_url = "-";
-                    if (file_info.Duration != 0) {
+                    if (file_info.IsDownloaded) {
                         td_download_url = "<a href='" + DOWNLOAD_URL + file_info.FileName + "'>" + DOWNLOAD_URL + file_info.FileName + "</a>";
                     }
                     var td_source_url = file_info.SourceUrl.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -240,7 +240,8 @@
                             url: FILE_API + "?filename=" + filename,
                             method: "DELETE"
                         }).done(function (data) {
-                            $self.parent().remove()
+                            $self.parent().remove();
+                            $(".alert").addClass("alert-success").append(data);
                         }).fail(function (data) {
                             $(".alert").append(data);
                         })

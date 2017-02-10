@@ -18,6 +18,7 @@ _cgo_gotypes.go
 _cgo_export.*
 
 _testmain.go
+file_download_proxy
 
 *.exe
 *.test

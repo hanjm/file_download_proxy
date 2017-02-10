@@ -94,7 +94,7 @@
     <div class="alert">
     </div>
     <div>
-        <form class="form form-horizontal">
+        <form class="form form-horizontal" id="url-input-form">
             <div class="form-group col-sm-12" id="main-form">
                 <div class="col-sm-10">
                     <input class="form-control" id="url" name="url" placeholder="请输入下载地址">
@@ -256,6 +256,11 @@
                 $(".alert").append(data);
             });
         }
+        //        输入框内回车阻止提交form并点击下载
+        $("#url-input-form").on("submit", function (e) {
+            e.preventDefaultEvent;
+            document.getElementById("create_download_task").click();
+        });
         $("#create_download_task").on("click", function () {
             var $url_input = $("#url");
             var url = $url_input.val();
@@ -281,18 +286,18 @@
 
         setInterval(function () {
             $("tr.bg-info").each(
-                function () {
-                    var $this = $(this);
-                    var content_length = parseInt($this.children(".content_length").text());
-                    var start_timestamp = parseInt($this.children(".start_timestamp").text());
-                    var speed = parseInt($this.children(".speed").text());
-                    var rate = parseInt($this.find("div.progress-number").text().trim("%"));
-                    var new_rate = (Date.now() - start_timestamp) / 1000 * speed / content_length * 100;
+                    function () {
+                        var $this = $(this);
+                        var content_length = parseInt($this.children(".content_length").text());
+                        var start_timestamp = parseInt($this.children(".start_timestamp").text());
+                        var speed = parseInt($this.children(".speed").text());
+                        var rate = parseInt($this.find("div.progress-number").text().trim("%"));
+                        var new_rate = (Date.now() - start_timestamp) / 1000 * speed / content_length * 100;
 //                        console.log(content_length, start_timestamp, rate, new_rate);
-                    if (new_rate > rate && new_rate < 100) {
-                        update_circular_progress($this, new_rate)
+                        if (new_rate > rate && new_rate < 100) {
+                            update_circular_progress($this, new_rate)
+                        }
                     }
-                }
             )
         }, 500)
     </script>

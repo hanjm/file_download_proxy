@@ -10,3 +10,7 @@ Usage: go run file_download_proxy.go addr:port
 
 Example:go run file_download_proxy.go 127.0.0.1:8000
 ```
+
+update:
+增加Content-Length<3G限制
+https://github.com/hanjm/file_download_proxy/blob/master/file_download_proxy.go#L202-L205

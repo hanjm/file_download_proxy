@@ -15,12 +15,17 @@
             /*margin-top: 50px;*/
         }
 
+        table {
+            table-layout: fixed;
+        }
+
         td.complete_rate {
             padding: 0;
         }
 
         td, th {
             text-align: center;
+            word-wrap: break-word;
         }
 
         td.content_length, td.start_timestamp, td.speed {
@@ -107,16 +112,16 @@
     <table class="table">
         <thead class="files-info-thead">
         <tr>
-            <th>序号</th>
+            <th style="width: 50px;">序号</th>
             <th>文件名</th>
-            <th>大小</th>
-            <th>速度</th>
-            <th>进度</th>
+            <th style="width: 120px;">大小</th>
+            <th style="width: 80px;">速度</th>
+            <th style="width: 80px;">进度</th>
             <th>下载地址</th>
             <th>源</th>
-            <th>开始时间</th>
-            <th>用时</th>
-            <th>操作</th>
+            <th style="width: 100px;">开始时间</th>
+            <th style="width: 80px;">用时</th>
+            <th style="width: 80px;">操作</th>
         </tr>
         </thead>
         <tbody id="files-info-container"></tbody>
@@ -176,7 +181,7 @@
                     if (file_info.IsDownloaded) {
                         td_download_url = "<a href='" + DOWNLOAD_URL + file_info.FileName + "'>" + DOWNLOAD_URL + file_info.FileName + "</a>";
                     }
-                    var td_source_url = file_info.SourceUrl.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+                    var td_source_url = file_info.SourceUrl.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
                     var td_start_time = formate_timestamp(file_info.StartTimeStamp);
                     var td_duration = file_info.IsDownloaded ? file_info.Duration + " 秒" : "-";
                     var td_start_timestamp = file_info.StartTimeStamp * 1000;
@@ -249,9 +254,9 @@
                             method: "DELETE"
                         }).done(function (data) {
                             $self.parent().remove();
-                            $(".alert").addClass("alert-success").append(data);
-                        }).fail(function (data) {
-                            $(".alert").addClass("alert-danger").append(data);
+                            $(".alert").addClass("alert-success").append(data).removeClass("alert-danger");
+                        }).fail(function (xhr, option, err) {
+                            $(".alert").addClass("alert-danger").append(xhr.responseText + "<br/>").removeClass("alert-success");
                         })
                     })
                 }
@@ -260,8 +265,8 @@
                         $(this).remove();
                     })
                 }
-            }).fail(function (data) {
-                $(".alert").append(data);
+            }).fail(function (xhr, option, err) {
+                $(".alert").addClass("alert-danger").append(xhr.responseText + err + "<br/>").removeClass("alert-success");
             });
         }
         fetch_files_info();
@@ -285,15 +290,15 @@
                         url: url
                     }
                 }).done(function (data) {
-                    $(".alert").addClass("alert-success").append(data);
+                    $(".alert").addClass("alert-success").append(data + "<br/>").removeClass("alert-danger");
 //                    添加任务成功后立即刷新
                     clearInterval(fresh_interval);
                     fetch_files_info();
                     fresh_interval = setInterval(function () {
                         fetch_files_info();
                     }, 5000);
-                }).fail(function (data) {
-                    $(".alert").addClass("alert-danger").append(data);
+                }).fail(function (xhr, option, err) {
+                    $(".alert").addClass("alert-danger").append(xhr.responseText + "<br/>").removeClass("alert-success");
                 })
             }
         });

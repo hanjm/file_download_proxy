@@ -28,6 +28,7 @@ const DOWNLOAD_DIRNAME = "download"
 //aria2c 配置
 const ARIA2_ADD_URL_METHOD = "aria2.addUri"
 const ARIA2_TELL_STATUS_METHOD = "aria2.tellStatus"
+const ARIA2_REMOVE_DOWNLOAD_RESULT = "aria2.removeDownloadResult"
 
 var safe_filename_regexp = regexp.MustCompile(`[\w\d.]+`)
 var content_length_regexp = regexp.MustCompile(`[Cc]ontent-[Ll]ength: ?(\d+)`)
@@ -266,79 +267,99 @@ func fetch_file(file_info *FileInfo) {
 		}
 		cmd.Wait()
 		file_info.Duration = time.Now().Unix() - file_info.StartTimeStamp
-		file_info.Speed = file_info.ContentLength / file_info.Duration
+		if file_info.Duration > 0 {
+			file_info.Speed = file_info.ContentLength / file_info.Duration
+		}
 		file_info.IsDownloaded = true
 	} else if strings.HasPrefix(source_url, "magnet:?xt=urn:btih:") {
 		//support magnet
 		// check aria2c
-		if is_aria2c_running {
-			//send json rpc
-			aria2_task_id := file_info.FileName
-			response, err := rpc_call_aria2c(ARIA2_ADD_URL_METHOD, aria2_task_id, []interface{}{[]string{source_url}})
+		if ! is_aria2c_running {
+			err_message := "aria2c is not running,cannot download magnet"
+			handle_fetch_file_error(file_info, err_message)
+			return
+		}
+		//send json rpc
+		aria2_task_id := file_info.FileName
+		response, err := rpc_call_aria2c(ARIA2_ADD_URL_METHOD, aria2_task_id, []interface{}{[]string{source_url}})
+		if err != nil {
+			err_message := fmt.Sprintf("rpc_call error when calling aria2.addUrl %v source_url:%v", err, source_url)
+			handle_fetch_file_error(file_info, err_message)
+			return
+		}
+		task_gid := response.Result
+		file_info.StartTimeStamp = time.Now().Unix()
+		// get task info
+		task_status := "active"
+		update_file_name := false
+		for task_status != "complete" {
+			time.Sleep(time.Second * 5)
+			response, err = rpc_call_aria2c(ARIA2_TELL_STATUS_METHOD, aria2_task_id, []interface{}{task_gid})
 			if err != nil {
-				err_message := fmt.Sprintf("rpc_call error when calling aria2.addUrl %v source_url:%v", err, source_url)
+				err_message := fmt.Sprintf("rpc_call error when calling aria2.tellStatus %v source_url:%v", err, source_url)
 				handle_fetch_file_error(file_info, err_message)
 				return
 			}
-			task_gid := response.Result
-			file_info.StartTimeStamp = time.Now().Unix()
-			// get task info
-			task_status := "active"
-			update_file_name := false
-			for task_status != "complete" {
-				time.Sleep(time.Second * 5)
-				response, err = rpc_call_aria2c(ARIA2_TELL_STATUS_METHOD, "qer", []interface{}{task_gid})
-				if err != nil {
-					err_message := fmt.Sprintf("rpc_call error when calling aria2.tellStatus %v source_url:%v", err, source_url)
-					handle_fetch_file_error(file_info, err_message)
-					return
-				}
-				result := response.Result.(map[string]interface{})
-				task_status = result["status"].(string)
-				// check error message
-				result_error_message := result["errorMessage"]
-				if !(result_error_message == nil || result_error_message == "") {
-					err_message := fmt.Sprintf("aria2 error:%v source_url:%v", result_error_message, source_url)
-					handle_fetch_file_error(file_info, err_message)
-					return
-				}
-				//arai2c 返回的totalLength的很奇怪
-				//total_length := result["totalLength"].(string)
-				//file_info.ContentLength, _ = strconv.ParseInt(total_length, 10, 64)
-				// 磁力链接建立任务时无法指定文件名 获得真实文件名后需要重命名
-				if ! update_file_name {
-					real_filename := strings.Replace(result["files"].([]interface{})[0].(map[string]interface{})["path"].(string), "[METADATA]", "", 1)
-					//检查同名文件以下载同名文件以免覆盖已下载文件
-					if files_info[real_filename] != nil {
-						err_message := fmt.Sprintf("file %v is exist. source_url:%v", real_filename, source_url)
-						handle_fetch_file_error(file_info, err_message)
-						return
-					}
-					files_info[real_filename] = &FileInfo{
-						FileName:       real_filename,
-						SourceUrl:      file_info.SourceUrl,
-						Size:           file_info.Size,
-						ContentLength:  file_info.Speed,
-						StartTimeStamp: file_info.StartTimeStamp,
-						Duration:       file_info.Duration,
-						Speed:          file_info.Speed,
-						IsDownloaded:   file_info.IsDownloaded,
-						IsError:        file_info.IsError,
-					}
-					delete(files_info, file_info.FileName)
-					update_file_name = true
-					file_info = files_info[real_filename]
-				}
-				result_json, _ := json.Marshal(response.Result)
-				log.Printf("aria2 status:%s\n", result_json)
-
+			result := response.Result.(map[string]interface{})
+			task_status = result["status"].(string)
+			// check error message
+			result_error_message := result["errorMessage"]
+			if !(result_error_message == nil || result_error_message == "") {
+				err_message := fmt.Sprintf("aria2 error:%v source_url:%v", result_error_message, source_url)
+				handle_fetch_file_error(file_info, err_message)
+				return
 			}
-			file_info.Duration = time.Now().Unix() - file_info.StartTimeStamp
-			file_info.Speed = file_info.ContentLength / file_info.Duration
-			file_info.IsDownloaded = true
-		} else {
-			log.Println("aria2c is not running,cannot download magnet")
+			//arai2c 返回的totalLength的很奇怪
+			//total_length := result["totalLength"].(string)
+			//file_info.ContentLength, _ = strconv.ParseInt(total_length, 10, 64)
+			// 磁力链接建立任务时无法指定文件名 获得真实文件名后需要重命名
+			if ! update_file_name {
+				real_filename := strings.Replace(result["files"].([]interface{})[0].(map[string]interface{})["path"].(string), "[METADATA]", "", 1)
+				//检查同名文件以下载同名文件以免覆盖已下载文件
+				if files_info[real_filename] != nil {
+					err_message := fmt.Sprintf("file %v is exist. source_url:%v", real_filename, source_url)
+					handle_fetch_file_error(file_info, err_message)
+					return
+				}
+				files_info[real_filename] = &FileInfo{
+					FileName:       real_filename,
+					SourceUrl:      file_info.SourceUrl,
+					Size:           file_info.Size,
+					ContentLength:  file_info.Speed,
+					StartTimeStamp: file_info.StartTimeStamp,
+					Duration:       file_info.Duration,
+					Speed:          file_info.Speed,
+					IsDownloaded:   file_info.IsDownloaded,
+					IsError:        file_info.IsError,
+				}
+				delete(files_info, file_info.FileName)
+				update_file_name = true
+				file_info = files_info[real_filename]
+			}
+			result_json, _ := json.Marshal(response.Result)
+			log.Printf("aria2 status:%s\n", result_json)
+
 		}
+		//aria2.removeDownloadResult
+		response, err = rpc_call_aria2c(ARIA2_REMOVE_DOWNLOAD_RESULT, aria2_task_id, []interface{}{task_gid})
+		if err != nil {
+			log.Printf("rpc_call error when calling aria2.removeDownloadResult %v\n", err)
+		}
+		file_info.Duration = time.Now().Unix() - file_info.StartTimeStamp
+		if file_info.Duration > 0 {
+			//arai2c 返回的totalLength的很奇怪 只能重新read一次获得file size
+			sys_file_info, err := os.Stat(DOWNLOAD_DIRNAME + "/" + file_info.FileName)
+			if err != nil {
+				file_info.Speed = sys_file_info.Size() / file_info.Duration
+			}
+		}
+		file_info.IsDownloaded = true
+		return
+
+	} else {
+		// 既不是http 也不是magnet
+		err_message := fmt.Sprintf("do not support this protocol,source_url:%v", source_url)
+		handle_fetch_file_error(file_info, err_message)
 		return
 	}
 

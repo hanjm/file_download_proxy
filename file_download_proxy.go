@@ -266,7 +266,7 @@ func fetch_file(file_info *FileInfo) {
 		}
 		cmd.Wait()
 		file_info.Duration = time.Now().Unix() - file_info.StartTimeStamp
-		file_info.Speed = file_info.Size / file_info.Duration
+		file_info.Speed = file_info.ContentLength / file_info.Duration
 		file_info.IsDownloaded = true
 	} else if strings.HasPrefix(source_url, "magnet:?xt=urn:btih:") {
 		//support magnet
@@ -334,7 +334,7 @@ func fetch_file(file_info *FileInfo) {
 
 			}
 			file_info.Duration = time.Now().Unix() - file_info.StartTimeStamp
-			file_info.Speed = file_info.Size / file_info.Duration
+			file_info.Speed = file_info.ContentLength / file_info.Duration
 			file_info.IsDownloaded = true
 		} else {
 			log.Println("aria2c is not running,cannot download magnet")

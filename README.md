@@ -15,6 +15,7 @@ Usage: go run file_download_proxy.go addr:port
 Example:go run file_download_proxy.go 127.0.0.1:8000
 ```
 然后访问: http://127.0.0.1:8000
+
 推荐使用tmux实现后台运行 https://tmux.github.io/
 
 # 注意事项

@@ -15,12 +15,17 @@
             /*margin-top: 50px;*/
         }
 
+        table {
+            table-layout: fixed;
+        }
+
         td.complete_rate {
             padding: 0;
         }
 
         td, th {
             text-align: center;
+            word-wrap: break-word;
         }
 
         td.content_length, td.start_timestamp, td.speed {
@@ -107,16 +112,16 @@
     <table class="table">
         <thead class="files-info-thead">
         <tr>
-            <th>序号</th>
+            <th style="width: 50px;">序号</th>
             <th>文件名</th>
-            <th>大小</th>
-            <th>速度</th>
-            <th>进度</th>
+            <th style="width: 80px;">大小</th>
+            <th style="width: 60px;">速度</th>
+            <th style="width: 80px;">进度</th>
             <th>下载地址</th>
             <th>源</th>
-            <th>开始时间</th>
-            <th>用时</th>
-            <th>操作</th>
+            <th style="width: 100px;">开始时间</th>
+            <th style="width: 80px;">用时</th>
+            <th style="width: 80px;">操作</th>
         </tr>
         </thead>
         <tbody id="files-info-container"></tbody>

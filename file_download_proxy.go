@@ -40,10 +40,10 @@ var bind_addr string
 var index_data bytes.Buffer
 
 type FileInfo struct {
-	FileName       string
-	SourceUrl      string
-	Size           int64
-	ContentLength  int64
+	FileName      string
+	SourceUrl     string
+	Size          int64
+	ContentLength int64
 	//HumanSize          string
 	//HumanContentLength string
 	StartTimeStamp int64
@@ -112,7 +112,7 @@ func file_operation_handler(w http.ResponseWriter, req *http.Request) {
 		}
 		log.Printf("Download %v", filename)
 		//http.ServeFile(w, req, "download/" + filename)
-		http.Redirect(w, req, "/download/" + filename, http.StatusTemporaryRedirect)
+		http.Redirect(w, req, "/download/"+filename, http.StatusTemporaryRedirect)
 	case "POST":
 		download_url := req.PostFormValue("url")
 		if download_url == "" {
@@ -217,7 +217,7 @@ func get_content_length(url string) (int64, error) {
 	var content_length int64
 	content_lengths := content_length_regexp.FindAllStringSubmatch(string(output), -1)
 	if content_lengths != nil {
-		content_length, _ = strconv.ParseInt(content_lengths[len(content_lengths) - 1][1], 10, 64)
+		content_length, _ = strconv.ParseInt(content_lengths[len(content_lengths)-1][1], 10, 64)
 	} else {
 		content_length = 0
 	}
@@ -349,7 +349,7 @@ func get_safe_filename(url string) string {
 	_, filename_in_url := path.Split(url)
 	filename := strings.Join(safe_filename_regexp.FindAllString(filename_in_url, -1), "")
 	if len_of_filename := len(filename); len_of_filename > 50 {
-		filename = filename[len_of_filename - 50:len_of_filename]
+		filename = filename[len_of_filename-50 : len_of_filename]
 	}
 	file_ext := path.Ext(filename)
 	return fmt.Sprintf("%s-%v%s", strings.Replace(filename, file_ext, "", -1), time.Now().Unix(), file_ext)

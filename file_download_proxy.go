@@ -31,9 +31,11 @@ const ARIA2_TELL_STATUS_METHOD = "aria2.tellStatus"
 const ARIA2_REMOVE_DOWNLOAD_RESULT = "aria2.removeDownloadResult"
 
 var safe_filename_regexp = regexp.MustCompile(`[\w\d.]+`)
+var header_filename_regexp = regexp.MustCompile(`[Cc]ontent-[Dd]isposition: ?attachment; ?filename=(.*)`)
 var content_length_regexp = regexp.MustCompile(`[Cc]ontent-[Ll]ength: ?(\d+)`)
 //refused to download testfile regexp
-var testfile_filename_regexp = regexp.MustCompile(`(test)?\d+[MmGg][Bb]?\..*`)
+var testfile_filename_regexp = regexp.MustCompile(`(test)?\d+[MmGg][Bb]?-.*`)
+
 var files_info = map[string]*FileInfo{}
 var is_aria2c_running bool
 
@@ -209,20 +211,29 @@ func delete_file(filename string) error {
 	return errors.New("no such file or direcotry..")
 
 }
-func get_content_length(url string) (int64, error) {
+func get_content_length_and_attachment_filename(url string) (int64, string, error) {
 	output, err := exec.Command("curl", "-IL", url).Output()
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
-	//log.Printf("%v", string(output))
+	output_str := string(output)
+	//parse content_length
 	var content_length int64
-	content_lengths := content_length_regexp.FindAllStringSubmatch(string(output), -1)
+	content_lengths := content_length_regexp.FindAllStringSubmatch(output_str, -1)
 	if content_lengths != nil {
 		content_length, _ = strconv.ParseInt(content_lengths[len(content_lengths)-1][1], 10, 64)
 	} else {
 		content_length = 0
 	}
-	return content_length, nil
+	// parse attachment_name
+	var attachment_name string
+	attachment_names := header_filename_regexp.FindAllStringSubmatch(output_str, -1)
+	if attachment_names != nil {
+		attachment_name = attachment_names[len(attachment_names)-1][1]
+	} else {
+		attachment_name = ""
+	}
+	return content_length, attachment_name, nil
 }
 
 func handle_fetch_file_error(file_info *FileInfo, err_message string) {
@@ -240,18 +251,33 @@ func fetch_file(file_info *FileInfo) {
 	if strings.HasPrefix(source_url, "http") {
 		// http
 		//一些资源是动态生成的,请求第一次是chuncked stream,Header不带Content-Length,第二次请求就有Content-length
-		content_length, err := get_content_length(source_url)
+		content_length, attachment_name, err := get_content_length_and_attachment_filename(source_url)
 		if content_length != 0 {
 			file_info.ContentLength = content_length
 		} else {
-			content_length, err = get_content_length(source_url)
+			content_length, attachment_name, err = get_content_length_and_attachment_filename(source_url)
 		}
 		if err != nil {
 			err_message := fmt.Sprintf("curl error:%v source_url:%v", err, source_url)
 			handle_fetch_file_error(file_info, err_message)
 			return
 		}
-		//file_info.HumanContentLength = get_human_size_string(file_info.ContentLength)
+		// if header has attach filename update it
+		if attachment_name != "" {
+			files_info[attachment_name] = &FileInfo{
+				FileName:       get_safe_filename(attachment_name),
+				SourceUrl:      file_info.SourceUrl,
+				Size:           file_info.Size,
+				ContentLength:  file_info.ContentLength,
+				StartTimeStamp: file_info.StartTimeStamp,
+				Duration:       file_info.Duration,
+				Speed:          file_info.Speed,
+				IsDownloaded:   file_info.IsDownloaded,
+				IsError:        file_info.IsError,
+			}
+			delete(files_info, file_info.FileName)
+			file_info = files_info[attachment_name]
+		}
 		log.Printf("Create Download: length:%s source:%s filename:%s \n", get_human_size_string(file_info.ContentLength), source_url, file_info.FileName)
 		if content_length > LIMIT_SIZE {
 			err_message := fmt.Sprintf("The content length of source_url is too big :%v", source_url)
@@ -266,11 +292,6 @@ func fetch_file(file_info *FileInfo) {
 			return
 		}
 		cmd.Wait()
-		file_info.Duration = time.Now().Unix() - file_info.StartTimeStamp
-		if file_info.Duration > 0 {
-			file_info.Speed = file_info.ContentLength / file_info.Duration
-		}
-		file_info.IsDownloaded = true
 	} else if strings.HasPrefix(source_url, "magnet:?xt=urn:btih:") {
 		//support magnet
 		// check aria2c
@@ -325,7 +346,7 @@ func fetch_file(file_info *FileInfo) {
 					FileName:       real_filename,
 					SourceUrl:      file_info.SourceUrl,
 					Size:           file_info.Size,
-					ContentLength:  file_info.Speed,
+					ContentLength:  file_info.ContentLength,
 					StartTimeStamp: file_info.StartTimeStamp,
 					Duration:       file_info.Duration,
 					Speed:          file_info.Speed,
@@ -345,16 +366,6 @@ func fetch_file(file_info *FileInfo) {
 		if err != nil {
 			log.Printf("rpc_call error when calling aria2.removeDownloadResult %v\n", err)
 		}
-		file_info.Duration = time.Now().Unix() - file_info.StartTimeStamp
-		if file_info.Duration > 0 {
-			//arai2c 返回的totalLength的很奇怪 只能重新read一次获得file size
-			sys_file_info, err := os.Stat(DOWNLOAD_DIRNAME + "/" + file_info.FileName)
-			if err != nil {
-				file_info.Speed = sys_file_info.Size() / file_info.Duration
-			}
-		}
-		file_info.IsDownloaded = true
-		return
 
 	} else {
 		// 既不是http 也不是magnet
@@ -362,7 +373,19 @@ func fetch_file(file_info *FileInfo) {
 		handle_fetch_file_error(file_info, err_message)
 		return
 	}
-
+	// finish download update file_info
+	file_info.Duration = time.Now().Unix() - file_info.StartTimeStamp
+	if file_info.Duration > 0 {
+		if file_info.ContentLength > 0 {
+			file_info.Speed = file_info.ContentLength / file_info.Duration
+		} else {
+			sys_file_info, err := os.Stat(DOWNLOAD_DIRNAME + "/" + file_info.FileName)
+			if err != nil {
+				file_info.Speed = sys_file_info.Size() / file_info.Duration
+			}
+		}
+	}
+	file_info.IsDownloaded = true
 }
 
 //utils

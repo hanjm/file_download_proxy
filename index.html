@@ -139,8 +139,7 @@
             for (; size > 1024; index++) {
                 size /= 1024;
             }
-            return Math.round(size) + HUMAN_READ_UNIT[index]
-
+            return Math.round(size * 100) / 100 + HUMAN_READ_UNIT[index]
         }
         //        更新进度环
         function update_circular_progress(progress_element, complete_rate) {
@@ -304,18 +303,18 @@
         });
         setInterval(function () {
             $("tr.bg-info").each(
-                    function () {
-                        var $this = $(this);
-                        var content_length = parseInt($this.children(".content_length").text());
-                        var start_timestamp = parseInt($this.children(".start_timestamp").text());
-                        var speed = parseInt($this.children(".speed").text());
-                        var rate = parseInt($this.find("div.progress-number").text().trim("%"));
-                        var new_rate = (Date.now() - start_timestamp) / 1000 * speed / content_length * 100;
+                function () {
+                    var $this = $(this);
+                    var content_length = parseInt($this.children(".content_length").text());
+                    var start_timestamp = parseInt($this.children(".start_timestamp").text());
+                    var speed = parseInt($this.children(".speed").text());
+                    var rate = parseInt($this.find("div.progress-number").text().trim("%"));
+                    var new_rate = (Date.now() - start_timestamp) / 1000 * speed / content_length * 100;
 //                        console.log(content_length, start_timestamp, rate, new_rate);
-                        if (new_rate > rate && new_rate < 100) {
-                            update_circular_progress($this, new_rate)
-                        }
+                    if (new_rate > rate && new_rate < 100) {
+                        update_circular_progress($this, new_rate)
                     }
+                }
             )
         }, 500)
     </script>

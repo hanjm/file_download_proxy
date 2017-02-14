@@ -43,12 +43,10 @@ var bind_addr string
 var index_data bytes.Buffer
 
 type FileInfo struct {
-	FileName      string
-	SourceUrl     string
-	Size          int64
-	ContentLength int64
-	//HumanSize          string
-	//HumanContentLength string
+	FileName       string
+	SourceUrl      string
+	Size           int64
+	ContentLength  int64
 	StartTimeStamp int64
 	Duration       int64
 	Speed          int64
@@ -114,7 +112,6 @@ func file_operation_handler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		log.Printf("Download %v", filename)
-		//http.ServeFile(w, req, "download/" + filename)
 		http.Redirect(w, req, "/download/"+filename, http.StatusTemporaryRedirect)
 	case "POST":
 		download_url := req.PostFormValue("url")
@@ -173,21 +170,32 @@ func list_files(dirname string) int64 {
 		} else {
 			file_info := files_info[file.Name()]
 			if file_info == nil {
-				continue
+				//rebuild new local file
+				file_size := file.Size()
+				filename := file.Name()
+				new_file_info := FileInfo{
+					FileName:       filename,
+					SourceUrl:      "Local",
+					Size:           file_size,
+					ContentLength:  file_size,
+					StartTimeStamp: file.ModTime().Unix(),
+					Duration:       0,
+					Speed:          0,
+					IsDownloaded:   true,
+					IsError:        false}
+				files_info[filename] = &new_file_info
+
 			}
 			if file_info.Size != file.Size() {
 				file_info.Size = file.Size()
-				//file_info.HumanSize = get_human_size_string(file_info.Size)
 			}
 			if (! file_info.IsDownloaded) && (!file_info.IsError) {
 				duration := time.Now().Unix() - file_info.StartTimeStamp
 				if duration > 0 {
-					//file_info.Speed = get_human_size_string(file_info.Size / duration) + "/s"
 					file_info.Speed = file_info.Size / duration
 				}
 			} else {
 				file_info.ContentLength = file_info.Size
-				//file_info.HumanContentLength = file_info.HumanSize
 			}
 			file_size += int64(math.Max(float64(file.Size()), float64(file_info.ContentLength)))
 		}
@@ -455,14 +463,11 @@ func main() {
 		} else {
 			file_size := file.Size()
 			filename := file.Name()
-			//human_file_size := get_human_size_string(file_size)
 			new_file_info := FileInfo{
-				FileName:      filename,
-				SourceUrl:     "Local",
-				Size:          file_size,
-				ContentLength: file_size,
-				//HumanSize:human_file_size,
-				//HumanContentLength:human_file_size,
+				FileName:       filename,
+				SourceUrl:      "Local",
+				Size:           file_size,
+				ContentLength:  file_size,
 				StartTimeStamp: file.ModTime().Unix(),
 				Duration:       0,
 				Speed:          0,

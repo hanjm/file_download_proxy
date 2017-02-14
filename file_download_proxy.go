@@ -198,16 +198,20 @@ func list_files(dirname string) int64 {
 func delete_file(filename string) error {
 	file_info := files_info[filename]
 	if file_info != nil {
-		if !file_info.IsError {
-			err := os.Remove("download/" + filename)
-			if err != nil {
-				return err
+		if file_info.IsDownloaded {
+			if !file_info.IsError {
+				err := os.RemoveAll(DOWNLOAD_DIRNAME + "/" + filename)
+				if err != nil {
+					return err
+				}
 			}
+			delete(files_info, filename)
+			return nil
 		}
-		delete(files_info, filename)
-		return nil
+		return errors.New("file is downloading..")
+
 	}
-	log.Printf("%v %v", filename, files_info)
+	log.Println(filename, files_info)
 	return errors.New("no such file or direcotry..")
 
 }
@@ -239,12 +243,12 @@ func get_content_length_and_attachment_filename(url string) (int64, string, erro
 func handle_fetch_file_error(file_info *FileInfo, err_message string) {
 	log.Println(err_message)
 	file_info.IsError = true
-	file_info.SourceUrl = err_message
+	file_info.SourceUrl += err_message
 }
 func fetch_file(file_info *FileInfo) {
 	source_url := file_info.SourceUrl
 	if testfile_filename_regexp.MatchString(file_info.FileName) {
-		err_message := fmt.Sprintf("refused to download testfile:%v", source_url)
+		err_message := "refused to download testfile:"
 		handle_fetch_file_error(file_info, err_message)
 		return
 	}
@@ -258,14 +262,15 @@ func fetch_file(file_info *FileInfo) {
 			content_length, attachment_name, err = get_content_length_and_attachment_filename(source_url)
 		}
 		if err != nil {
-			err_message := fmt.Sprintf("curl error:%v source_url:%v", err, source_url)
+			err_message := fmt.Sprintf("curl error:%v source_url:", err)
 			handle_fetch_file_error(file_info, err_message)
 			return
 		}
 		// if header has attach filename update it
 		if attachment_name != "" {
+			attachment_name = get_safe_filename(attachment_name)
 			files_info[attachment_name] = &FileInfo{
-				FileName:       get_safe_filename(attachment_name),
+				FileName:       attachment_name,
 				SourceUrl:      file_info.SourceUrl,
 				Size:           file_info.Size,
 				ContentLength:  file_info.ContentLength,
@@ -280,14 +285,14 @@ func fetch_file(file_info *FileInfo) {
 		}
 		log.Printf("Create Download: length:%s source:%s filename:%s \n", get_human_size_string(file_info.ContentLength), source_url, file_info.FileName)
 		if content_length > LIMIT_SIZE {
-			err_message := fmt.Sprintf("The content length of source_url is too big :%v", source_url)
+			err_message := "The content length of source_url is too big :"
 			handle_fetch_file_error(file_info, err_message)
 			return
 		}
 		file_info.StartTimeStamp = time.Now().Unix()
 		cmd := exec.Command("wget", "-O", "download/"+file_info.FileName, source_url)
 		if err := cmd.Start(); err != nil {
-			err_message := fmt.Sprintf("wget error:%v source_url:%v", err, source_url)
+			err_message := fmt.Sprintf("wget error:%v source_url:", err)
 			handle_fetch_file_error(file_info, err_message)
 			return
 		}
@@ -304,7 +309,7 @@ func fetch_file(file_info *FileInfo) {
 		aria2_task_id := file_info.FileName
 		response, err := rpc_call_aria2c(ARIA2_ADD_URL_METHOD, aria2_task_id, []interface{}{[]string{source_url}})
 		if err != nil {
-			err_message := fmt.Sprintf("rpc_call error when calling aria2.addUrl %v source_url:%v", err, source_url)
+			err_message := fmt.Sprintf("rpc_call error when calling aria2.addUrl %v source_url:", err)
 			handle_fetch_file_error(file_info, err_message)
 			return
 		}
@@ -317,7 +322,7 @@ func fetch_file(file_info *FileInfo) {
 			time.Sleep(time.Second * 5)
 			response, err = rpc_call_aria2c(ARIA2_TELL_STATUS_METHOD, aria2_task_id, []interface{}{task_gid})
 			if err != nil {
-				err_message := fmt.Sprintf("rpc_call error when calling aria2.tellStatus %v source_url:%v", err, source_url)
+				err_message := fmt.Sprintf("rpc_call error when calling aria2.tellStatus %v source_url:", err)
 				handle_fetch_file_error(file_info, err_message)
 				return
 			}
@@ -326,7 +331,7 @@ func fetch_file(file_info *FileInfo) {
 			// check error message
 			result_error_message := result["errorMessage"]
 			if !(result_error_message == nil || result_error_message == "") {
-				err_message := fmt.Sprintf("aria2 error:%v source_url:%v", result_error_message, source_url)
+				err_message := fmt.Sprintf("aria2 error:%v source_url:", result_error_message)
 				handle_fetch_file_error(file_info, err_message)
 				return
 			}
@@ -338,7 +343,7 @@ func fetch_file(file_info *FileInfo) {
 				real_filename := strings.Replace(result["files"].([]interface{})[0].(map[string]interface{})["path"].(string), "[METADATA]", "", 1)
 				//检查同名文件以下载同名文件以免覆盖已下载文件
 				if files_info[real_filename] != nil {
-					err_message := fmt.Sprintf("file %v is exist. source_url:%v", real_filename, source_url)
+					err_message := fmt.Sprintf("file %v is exist. source_url:", real_filename)
 					handle_fetch_file_error(file_info, err_message)
 					return
 				}
@@ -369,7 +374,7 @@ func fetch_file(file_info *FileInfo) {
 
 	} else {
 		// 既不是http 也不是magnet
-		err_message := fmt.Sprintf("do not support this protocol,source_url:%v", source_url)
+		err_message := "do not support this protocol,source_url:"
 		handle_fetch_file_error(file_info, err_message)
 		return
 	}

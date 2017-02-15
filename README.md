@@ -21,3 +21,4 @@ Example:go run file_download_proxy.go 127.0.0.1:8000
 # 注意事项
 1. 增加Content-Length< 3G限制
 https://github.com/hanjm/file_download_proxy/blob/master/file_download_proxy.go#L23
+2. 建议拖回本地时使用迅雷/Folx等专业下载工具以达到最大速度

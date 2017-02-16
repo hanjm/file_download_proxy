@@ -1,5 +1,5 @@
 # file_download_proxy
-文件下载代理服务
+文件下载中转服务
 ------------
 - 使用Golang net/http 包实现
 - 显示下载速度 css进度环

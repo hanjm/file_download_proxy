@@ -39,14 +39,14 @@ func getAsset(path string) []byte {
 func init() {
 	//parse addr:port args
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: go run main.go addr:port\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: download_proxy addr:port\n\n")
 	}
 	flag.Parse()
 
 	if len(os.Args) > 1 {
 		bind_addr = os.Args[1]
 	} else {
-		fmt.Fprintf(os.Stderr, "Usage: go run main.go addr:port\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: download_proxy addr:port\n\n")
 		os.Exit(1)
 	}
 

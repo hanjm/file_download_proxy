@@ -86,8 +86,7 @@
 <nav class="navbar navbar-default bg-info">
     <div class="container-fluid">
         <div class="navbar-header">
-            <a class="navbar-brand" href="#"><span class="glyphicon glyphicon-cloud-download">&nbsp;</span>File Download
-                Proxy</a>
+            <a class="navbar-brand" href="#"><span class="glyphicon glyphicon-cloud-download">&nbsp;</span>File Download Proxy</a>
         </div>
         <ul class="nav navbar-nav navbar-right">
             <li><a href="https://github.com/hanjm/file_download_proxy" target="_blank">
@@ -127,7 +126,7 @@
         <tbody id="files-info-container"></tbody>
     </table>
     <script>
-        var FILE_API = "http://{{ .Bind_addr }}/file_download_proxy/file";
+        var FILE_API = "http://{{ .Bind_addr }}/proxy/file";
         var FILES_API = FILE_API + "s";
         var DOWNLOAD_URL = "http://{{ .Bind_addr }}/download/";
         var HUMAN_READ_UNIT = ["B", "KB", "MB", "GB", "TB", "EB"];
@@ -248,9 +247,10 @@
                     $(".delete_file").off("click").on("click", function () {
                         var filename = $(this).parent().find(".filename").text();
                         var $self = $(this);
+                        console.log('delete')
                         $.ajax({
                             url: FILE_API + "?filename=" + filename,
-                            method: "DELETE"
+                            method: "delete",
                         }).done(function (data) {
                             $self.parent().remove();
                             $(".alert").addClass("alert-success").append(data).removeClass("alert-danger");

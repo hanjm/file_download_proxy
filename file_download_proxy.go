@@ -112,7 +112,7 @@ func file_operation_handler(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		log.Printf("Download %v", filename)
-		http.Redirect(w, req, "/download/"+filename, http.StatusTemporaryRedirect)
+		http.Redirect(w, req, "/download/" + filename, http.StatusTemporaryRedirect)
 	case "POST":
 		download_url := req.PostFormValue("url")
 		if download_url == "" {
@@ -206,18 +206,15 @@ func list_files(dirname string) int64 {
 func delete_file(filename string) error {
 	file_info := files_info[filename]
 	if file_info != nil {
-		if file_info.IsDownloaded {
-			if !file_info.IsError {
-				err := os.RemoveAll(DOWNLOAD_DIRNAME + "/" + filename)
-				if err != nil {
-					return err
-				}
-			}
-			delete(files_info, filename)
-			return nil
+		if !file_info.IsDownloaded  && !file_info.IsError {
+			return errors.New("file is downloading..")
 		}
-		return errors.New("file is downloading..")
-
+		err := os.RemoveAll(DOWNLOAD_DIRNAME + "/" + filename)
+		if err != nil {
+			return err
+		}
+		delete(files_info, filename)
+		return nil
 	}
 	log.Println(filename, files_info)
 	return errors.New("no such file or direcotry..")
@@ -233,7 +230,7 @@ func get_content_length_and_attachment_filename(url string) (int64, string, erro
 	var content_length int64
 	content_lengths := content_length_regexp.FindAllStringSubmatch(output_str, -1)
 	if content_lengths != nil {
-		content_length, _ = strconv.ParseInt(content_lengths[len(content_lengths)-1][1], 10, 64)
+		content_length, _ = strconv.ParseInt(content_lengths[len(content_lengths) - 1][1], 10, 64)
 	} else {
 		content_length = 0
 	}
@@ -241,7 +238,7 @@ func get_content_length_and_attachment_filename(url string) (int64, string, erro
 	var attachment_name string
 	attachment_names := header_filename_regexp.FindAllStringSubmatch(output_str, -1)
 	if attachment_names != nil {
-		attachment_name = attachment_names[len(attachment_names)-1][1]
+		attachment_name = attachment_names[len(attachment_names) - 1][1]
 	} else {
 		attachment_name = ""
 	}
@@ -298,7 +295,7 @@ func fetch_file(file_info *FileInfo) {
 			return
 		}
 		file_info.StartTimeStamp = time.Now().Unix()
-		cmd := exec.Command("wget", "-O", "download/"+file_info.FileName, source_url)
+		cmd := exec.Command("wget", "-O", "download/" + file_info.FileName, source_url)
 		if err := cmd.Start(); err != nil {
 			err_message := fmt.Sprintf("wget error:%v source_url:", err)
 			handle_fetch_file_error(file_info, err_message)
@@ -406,7 +403,7 @@ func get_safe_filename(url string) string {
 	_, filename_in_url := path.Split(url)
 	filename := strings.Join(safe_filename_regexp.FindAllString(filename_in_url, -1), "")
 	if len_of_filename := len(filename); len_of_filename > 50 {
-		filename = filename[len_of_filename-50: len_of_filename]
+		filename = filename[len_of_filename - 50: len_of_filename]
 	}
 	file_ext := path.Ext(filename)
 	return fmt.Sprintf("%s-%v%s", strings.Replace(filename, file_ext, "", -1), time.Now().Unix(), file_ext)

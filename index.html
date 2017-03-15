@@ -102,7 +102,8 @@
         <form class="form form-horizontal" id="url-input-form">
             <div class="form-group col-sm-12" id="main-form">
                 <div class="col-sm-10">
-                    <input class="form-control" id="url" name="url" placeholder="请输入下载地址 http/magnet (建议拖回本地时使用迅雷/Folx等专业下载工具以达到最大速度)">
+                    <input class="form-control" id="url" name="url"
+                           placeholder="请输入下载地址 http/magnet (建议拖回本地时使用迅雷/Folx等专业下载工具以达到最大速度) GitHub的资源只需要粘贴源地址,不要粘贴重定向到AWS的地址">
                 </div>
                 <button type="button" class="btn btn-success col-sm-2" id="create_download_task">下载</button>
             </div>
@@ -127,9 +128,9 @@
         <tbody id="files-info-container"></tbody>
     </table>
     <script>
-        var FILE_API = "http://{{ .Bind_addr }}/file_download_proxy/file";
+        var FILE_API = "http://{{ .BindAddr }}/file_download_proxy/file";
         var FILES_API = FILE_API + "s";
-        var DOWNLOAD_URL = "http://{{ .Bind_addr }}/download/";
+        var DOWNLOAD_URL = "http://{{ .BindAddr }}/download/";
         var HUMAN_READ_UNIT = ["B", "KB", "MB", "GB", "TB", "EB"];
         function formate_timestamp(timestamp) {
             return new Date(timestamp * 1000 + 28800000).toISOString().substr(0, 19).replace("T", " ")

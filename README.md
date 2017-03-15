@@ -21,5 +21,5 @@ Example:go run main.go 127.0.0.1:8000
 
 # 注意事项
 1. 增加Content-Length< 3G限制
-https://github.com/hanjm/file_download_proxy/blob/master/file_download_proxy.go#L23
+https://github.com/hanjm/file_download_proxy/blob/master/main.go#L23
 2. 建议拖回本地时使用迅雷/Folx等专业下载工具以达到最大速度,下载GitHub的大资源只需要粘贴源地址,不要粘贴重定向到AWS的地址

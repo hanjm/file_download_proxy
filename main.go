@@ -261,7 +261,7 @@ func fetchFileWorker() {
 		if testfileFilenameRegexp.MatchString(fileInfo.FileName) {
 			errMessage := "refused to download testfile:"
 			handleFetchFileError(fileInfo, errMessage)
-			return
+			continue
 		}
 		if strings.HasPrefix(sourceUrl, "http") {
 			// http
@@ -275,7 +275,7 @@ func fetchFileWorker() {
 			if err != nil {
 				errMessage := fmt.Sprintf("curl error:%v sourceUrl:", err)
 				handleFetchFileError(fileInfo, errMessage)
-				return
+				continue
 			}
 			// if header has attach filename update it
 			if attachmentName != "" {
@@ -298,14 +298,14 @@ func fetchFileWorker() {
 			if contentLength > LIMIT_SIZE {
 				errMessage := "The content length of sourceUrl is too big :"
 				handleFetchFileError(fileInfo, errMessage)
-				return
+				continue
 			}
 			fileInfo.StartTimeStamp = time.Now().Unix()
 			cmd := exec.Command("wget", "-O", "download/"+fileInfo.FileName, sourceUrl)
 			if err := cmd.Start(); err != nil {
 				errMessage := fmt.Sprintf("wget error:%v sourceUrl:", err)
 				handleFetchFileError(fileInfo, errMessage)
-				return
+				continue
 			}
 			cmd.Wait()
 		} else if strings.HasPrefix(sourceUrl, "magnet:?xt=urn:btih:") {
@@ -314,7 +314,7 @@ func fetchFileWorker() {
 			// 既不是http 也不是magnet
 			errMessage := "do not support this protocol,sourceUrl:"
 			handleFetchFileError(fileInfo, errMessage)
-			return
+			continue
 		}
 		// finish download update fileInfo
 		fileInfo.Duration = time.Now().Unix() - fileInfo.StartTimeStamp
@@ -325,7 +325,7 @@ func fetchFileWorker() {
 				sysFileInfo, err := os.Stat(DOWNLOAD_DIRNAME + "/" + fileInfo.FileName)
 				if err != nil {
 					handleFetchFileError(fileInfo, err.Error())
-					return
+					continue
 				}
 				fileInfo.Speed = sysFileInfo.Size() / fileInfo.Duration
 			}

@@ -85,7 +85,7 @@ func init() {
 	}
 	context := Context{BindAddr: bindAddr}
 	indexTemplate.Execute(&indexData, context)
-	// 10 gorutines
+	// 10 Goroutines
 	fileTasks = make(chan *FileInfo, 20)
 	for i := 0; i < 10; i++ {
 		go fetchFileWorker()

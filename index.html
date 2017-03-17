@@ -129,7 +129,7 @@
     </table>
     <script>
         var FILE_API = "http://{{ .BindAddr }}/file_download_proxy/file";
-        var FILES_API = FILE_API + "s";
+        var FILES_API = "ws://{{ .BindAddr }}/file_download_proxy/files";
         var DOWNLOAD_URL = "http://{{ .BindAddr }}/download/";
         var HUMAN_READ_UNIT = ["B", "KB", "MB", "GB", "TB", "EB"];
         function formate_timestamp(timestamp) {
@@ -159,120 +159,113 @@
             progress_element.find(".progress-wrapper-left").css("transform", "rotate(" + wrapper_left_rotate_deg + "deg)");
             progress_element.find(".progress-wrapper-right").css("transform", "rotate(" + wrapper_right_rotate_deg + "deg)");
         }
-        function fetch_files_info() {
+        function fetch_files_info(e) {
             var $container = $("#files-info-container");
             var length = $container.children('tr').length;
-            $.ajax({
-                url: FILES_API,
-                method: "GET"
-            }).done(function (data) {
-//                console.log(data);
-                var row_counter = 1;
-                for (var file_name in data) {
-                    var file_info = data[file_name];
-                    var td_size = get_human_read_size(file_info.Size) + " / " + get_human_read_size(file_info.ContentLength);
-                    var td_download_speed = get_human_read_size(file_info.Speed) + "/s";
-                    var complete_rate = file_info.ContentLength == 0 ? 0 : Math.ceil(file_info.Size / file_info.ContentLength * 100);
-                    if (file_info.IsDownloaded) {
-                        complete_rate = 100
-                    }
-                    var td_complete_rate = "<div class='progress-container'></div><div class='progress-full'></div><div class='progress-wrapper-left'></div><div class='progress-wrapper-right'></div><div class='progress-right'></div><div class='progress-number'>" + complete_rate + "%</div></div>";
-                    var td_download_url = "-";
-                    if (file_info.IsDownloaded) {
-                        td_download_url = "<a href='" + DOWNLOAD_URL + file_info.FileName + "'>" + DOWNLOAD_URL + file_info.FileName + "</a>";
-                    }
-                    var td_source_url = file_info.SourceUrl.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-                    var td_start_time = formate_timestamp(file_info.StartTimeStamp);
-                    var td_duration = file_info.IsDownloaded ? file_info.Duration + " 秒" : "-";
-                    var td_start_timestamp = file_info.StartTimeStamp * 1000;
+            if (e.data == undefined) {
+                return
+            }
+            console.log(e.data);
+            var data = JSON.parse(e.data);
+            var row_counter = 1;
+            for (var file_name in data) {
+                var file_info = data[file_name];
+                var td_size = get_human_read_size(file_info.Size) + " / " + get_human_read_size(file_info.ContentLength);
+                var td_download_speed = get_human_read_size(file_info.Speed) + "/s";
+                var complete_rate = file_info.ContentLength == 0 ? 0 : Math.ceil(file_info.Size / file_info.ContentLength * 100);
+                if (file_info.IsDownloaded) {
+                    complete_rate = 100
+                }
+                var td_complete_rate = "<div class='progress-container'></div><div class='progress-full'></div><div class='progress-wrapper-left'></div><div class='progress-wrapper-right'></div><div class='progress-right'></div><div class='progress-number'>" + complete_rate + "%</div></div>";
+                var td_download_url = "-";
+                if (file_info.IsDownloaded) {
+                    td_download_url = "<a href='" + DOWNLOAD_URL + file_info.FileName + "'>" + DOWNLOAD_URL + file_info.FileName + "</a>";
+                }
+                var td_source_url = file_info.SourceUrl.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+                var td_start_time = formate_timestamp(file_info.StartTimeStamp);
+                var td_duration = file_info.IsDownloaded ? file_info.Duration + " 秒" : "-";
+                var td_start_timestamp = file_info.StartTimeStamp * 1000;
 //                    仅更新表格数据不动DOM node
-                    var $tr;
-                    if (row_counter <= length) {
-                        $tr = $($container.children('tr')[row_counter - 1]);
-                        if (file_info.IsDownloaded) {
-                            $tr.removeClass("bg-info").removeClass("bg-danger");
-                        } else {
-                            if (file_info.IsError) {
-                                $tr.addClass("bg-danger").removeClass("bg-info");
-                            } else {
-                                $tr.addClass("bg-info").removeClass("bg-danger");
-                            }
-                        }
-                        $tr.children('.line_num').text(row_counter);
-                        $tr.children('.filename').text(file_info.FileName);
-                        $tr.children('.human_size').text(td_size);
-                        $tr.children('.download_speed').text(td_download_speed);
-                        $tr.children('.complete_rate').find('.progress-number').text(complete_rate + "%");
-                        $tr.children('.download_url').html(td_download_url);
-                        $tr.children('.source_url').text(td_source_url);
-                        $tr.children('.start_time').text(td_start_time);
-                        $tr.children('.duration').text(td_duration);
-
-                        $tr.children('.speed').text(file_info.Speed);
-                        $tr.children('.content_length').text(file_info.ContentLength);
-                        $tr.children('.start_timestamp').text(td_start_timestamp);
+                var $tr;
+                if (row_counter <= length) {
+                    $tr = $($container.children('tr')[row_counter - 1]);
+                    if (file_info.IsDownloaded) {
+                        $tr.removeClass("bg-info").removeClass("bg-danger");
                     } else {
-//                        增加tr更新表格数据
-                        var template = [];
-                        if (file_info.IsDownloaded) {
-                            template.push("<tr>");
+                        if (file_info.IsError) {
+                            $tr.addClass("bg-danger").removeClass("bg-info");
                         } else {
-                            if (file_info.IsError) {
-                                template.push("<tr class='bg-danger'>");
-                            }
-                            else {
-                                template.push("<tr class='bg-info'>");
-                            }
+                            $tr.addClass("bg-info").removeClass("bg-danger");
                         }
-                        template.push("<td class='line_num'>" + row_counter + "</td>");
-                        template.push("<td class='filename'>" + file_info.FileName + "</td>");
-                        template.push("<td class='human_size'>" + td_size + "</td>");
-                        template.push("<td class='download_speed'>" + td_download_speed + "</td>");
-                        template.push("<td class='complete_rate'>" + td_complete_rate + "</td>");
-                        template.push("<td class='download_url'>" + td_download_url + "</td>");
-                        template.push("<td class='source_url'>" + td_source_url + "</td>");
-                        template.push("<td class='start_time'>" + td_start_time + "</td>");
-                        template.push("<td class='duration'>" + td_duration + "</td>");
-                        template.push("<td class='delete_file'><button type='button' class='btn btn-default'>&nbsp;删除&nbsp;</button></td>");
-                        template.push("<td class='content_length'>" + file_info.ContentLength + "</td>");
-                        template.push("<td class='speed'>" + file_info.Speed + "</td>");
-                        template.push("<td class='start_timestamp'>" + td_start_timestamp + "</td>");
-                        template.push("</tr>");
-                        $container.append(template.join(""));
-                        $tr = $($container.children('tr')[row_counter - 1]);
                     }
-                    row_counter++;
+                    $tr.children('.line_num').text(row_counter);
+                    $tr.children('.filename').text(file_info.FileName);
+                    $tr.children('.human_size').text(td_size);
+                    $tr.children('.download_speed').text(td_download_speed);
+                    $tr.children('.complete_rate').find('.progress-number').text(complete_rate + "%");
+                    $tr.children('.download_url').html(td_download_url);
+                    $tr.children('.source_url').text(td_source_url);
+                    $tr.children('.start_time').text(td_start_time);
+                    $tr.children('.duration').text(td_duration);
+
+                    $tr.children('.speed').text(file_info.Speed);
+                    $tr.children('.content_length').text(file_info.ContentLength);
+                    $tr.children('.start_timestamp').text(td_start_timestamp);
+                } else {
+//                        增加tr更新表格数据
+                    var template = [];
+                    if (file_info.IsDownloaded) {
+                        template.push("<tr>");
+                    } else {
+                        if (file_info.IsError) {
+                            template.push("<tr class='bg-danger'>");
+                        }
+                        else {
+                            template.push("<tr class='bg-info'>");
+                        }
+                    }
+                    template.push("<td class='line_num'>" + row_counter + "</td>");
+                    template.push("<td class='filename'>" + file_info.FileName + "</td>");
+                    template.push("<td class='human_size'>" + td_size + "</td>");
+                    template.push("<td class='download_speed'>" + td_download_speed + "</td>");
+                    template.push("<td class='complete_rate'>" + td_complete_rate + "</td>");
+                    template.push("<td class='download_url'>" + td_download_url + "</td>");
+                    template.push("<td class='source_url'>" + td_source_url + "</td>");
+                    template.push("<td class='start_time'>" + td_start_time + "</td>");
+                    template.push("<td class='duration'>" + td_duration + "</td>");
+                    template.push("<td class='delete_file'><button type='button' class='btn btn-default'>&nbsp;删除&nbsp;</button></td>");
+                    template.push("<td class='content_length'>" + file_info.ContentLength + "</td>");
+                    template.push("<td class='speed'>" + file_info.Speed + "</td>");
+                    template.push("<td class='start_timestamp'>" + td_start_timestamp + "</td>");
+                    template.push("</tr>");
+                    $container.append(template.join(""));
+                    $tr = $($container.children('tr')[row_counter - 1]);
+                }
+                row_counter++;
 //                    更新进度环
-                    var $progress = $tr.children('.complete_rate');
-                    update_circular_progress($progress, complete_rate);
-                    //                        绑定删除事件
-                    $(".delete_file").off("click").on("click", function () {
-                        var filename = $(this).parent().find(".filename").text();
-                        var $self = $(this);
-                        $.ajax({
-                            url: FILE_API + "?filename=" + filename,
-                            method: "DELETE"
-                        }).done(function (data) {
-                            $self.parent().remove();
-                            $(".alert").addClass("alert-success").append(data).removeClass("alert-danger");
-                        }).fail(function (xhr, option, err) {
-                            $(".alert").addClass("alert-danger").append(xhr.responseText + "<br/>").removeClass("alert-success");
-                        })
+                var $progress = $tr.children('.complete_rate');
+                update_circular_progress($progress, complete_rate);
+                //                        绑定删除事件
+                $(".delete_file").off("click").on("click", function () {
+                    var filename = $(this).parent().find(".filename").text();
+                    var $self = $(this);
+                    $.ajax({
+                        url: FILE_API + "?filename=" + filename,
+                        method: "DELETE"
+                    }).done(function (data) {
+                        $self.parent().remove();
+                        $(".alert").addClass("alert-success").append(data).removeClass("alert-danger");
+                    }).fail(function (xhr, option, err) {
+                        $(".alert").addClass("alert-danger").append(xhr.responseText + "<br/>").removeClass("alert-success");
                     })
-                }
-                if (length >= row_counter) {
-                    $($container.children('tr').slice(row_counter - 1)).each(function () {
-                        $(this).remove();
-                    })
-                }
-            }).fail(function (xhr, option, err) {
-                $(".alert").addClass("alert-danger").append(xhr.responseText + err + "<br/>").removeClass("alert-success");
-            });
+                })
+            }
+            if (length >= row_counter) {
+                $($container.children('tr').slice(row_counter - 1)).each(function () {
+                    $(this).remove();
+                })
+            }
         }
-        fetch_files_info();
-        var fresh_interval = setInterval(function () {
-            fetch_files_info();
-        }, 5000);
         //        输入框内回车阻止提交form并点击下载
         $("#url-input-form").on("submit", function (e) {
             e.preventDefaultEvent;
@@ -291,17 +284,14 @@
                     }
                 }).done(function (data) {
                     $(".alert").addClass("alert-success").append(data + "<br/>").removeClass("alert-danger");
-//                    添加任务成功后立即刷新
-                    clearInterval(fresh_interval);
-                    fetch_files_info();
-                    fresh_interval = setInterval(function () {
-                        fetch_files_info();
-                    }, 5000);
                 }).fail(function (xhr, option, err) {
                     $(".alert").addClass("alert-danger").append(xhr.responseText + "<br/>").removeClass("alert-success");
                 })
             }
         });
+        ws = new WebSocket(FILES_API);
+        ws.onopen = fetch_files_info;
+        ws.onmessage = fetch_files_info;
         setInterval(function () {
             $("tr.bg-info").each(
                 function () {

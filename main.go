@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gorilla/websocket"
 	"html/template"
 	"io/ioutil"
 	"log"
@@ -37,9 +38,11 @@ var headerFilenameRegexp = regexp.MustCompile(`[Cc]ontent-[Dd]isposition: ?attac
 var contentLengthRegexp = regexp.MustCompile(`[Cc]ontent-[Ll]ength: ?(\d+)`)
 var testfileFilenameRegexp = regexp.MustCompile(`(test)?\d+[MmGg][Bb]?-.*`)
 var isAria2cRunning bool
-var fileTasks chan *FileInfo
+var fileTasks = make(chan *FileInfo, 20)
+var pushFilesUpdate = make(chan struct{})
 
-var fileInfos = map[string]*FileInfo{}
+var connections = make(map[*websocket.Conn]struct{})
+var fileInfos = make(map[string]*FileInfo)
 
 type FileInfo struct {
 	FileName       string
@@ -86,7 +89,6 @@ func init() {
 	context := Context{BindAddr: bindAddr}
 	indexTemplate.Execute(&indexData, context)
 	// 10 Goroutines
-	fileTasks = make(chan *FileInfo, 20)
 	for i := 0; i < 10; i++ {
 		go fetchFileWorker()
 	}
@@ -95,16 +97,22 @@ func init() {
 
 //list files handler
 func filesInfoHandler(w http.ResponseWriter, req *http.Request) {
-	switch req.Method {
-	case "GET":
-		var response []byte
-		listFiles(DOWNLOAD_DIRNAME)
-		response, _ = json.Marshal(fileInfos)
-		w.Header().Set("Content-Type", "json")
-		w.Write(response)
-	default:
-		w.WriteHeader(http.StatusBadRequest)
+	var upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
 	}
+	conn, err := upgrader.Upgrade(w, req, nil)
+	if err != nil {
+		log.Println("err when upgrader.Upgrade() ", err)
+		return
+	}
+	connections[conn] = struct{}{}
+	log.Println("new connection ", conn.RemoteAddr())
+	// 首次连接,推送文件信息
+	pushFilesUpdate <- struct{}{}
 }
 
 //fileOperationHandler handle file download(get) / create download task(post) / deleteFile(delete)
@@ -173,7 +181,8 @@ func listFiles(dirname string) int64 {
 		if file.IsDir() {
 			continue
 		} else {
-			fileInfo := fileInfos[file.Name()]
+			var fileInfo *FileInfo
+			fileInfo = fileInfos[file.Name()]
 			if fileInfo == nil {
 				//rebuild new local file
 				fileSize := file.Size()
@@ -189,7 +198,7 @@ func listFiles(dirname string) int64 {
 					IsDownloaded:   true,
 					IsError:        false}
 				fileInfos[filename] = &newFileInfo
-
+				fileInfo = &newFileInfo
 			}
 			if fileInfo.Size != file.Size() {
 				fileInfo.Size = file.Size()
@@ -277,7 +286,7 @@ func fetchFileWorker() {
 				handleFetchFileError(fileInfo, errMessage)
 				continue
 			}
-			// if header has attach filename update it
+			// if header has attach filename pushFilesUpdate it
 			if attachmentName != "" {
 				attachmentName = getSafeFilename(attachmentName)
 				fileInfos[attachmentName] = &FileInfo{
@@ -316,21 +325,25 @@ func fetchFileWorker() {
 			handleFetchFileError(fileInfo, errMessage)
 			continue
 		}
-		// finish download update fileInfo
+		// finish download pushFilesUpdate fileInfo
 		fileInfo.Duration = time.Now().Unix() - fileInfo.StartTimeStamp
-		if fileInfo.Duration > 0 {
-			if fileInfo.ContentLength > 0 {
-				fileInfo.Speed = fileInfo.ContentLength / fileInfo.Duration
-			} else {
-				sysFileInfo, err := os.Stat(DOWNLOAD_DIRNAME + "/" + fileInfo.FileName)
-				if err != nil {
-					handleFetchFileError(fileInfo, err.Error())
-					continue
-				}
-				fileInfo.Speed = sysFileInfo.Size() / fileInfo.Duration
+		if fileInfo.Duration <= 0 {
+			fileInfo.Duration = 1
+		}
+		if fileInfo.ContentLength > 0 {
+			fileInfo.Speed = fileInfo.ContentLength / fileInfo.Duration
+			fileInfo.Size = fileInfo.ContentLength
+		} else {
+			sysFileInfo, err := os.Stat(DOWNLOAD_DIRNAME + "/" + fileInfo.FileName)
+			if err != nil {
+				handleFetchFileError(fileInfo, err.Error())
+				continue
 			}
+			fileInfo.Size = sysFileInfo.Size()
+			fileInfo.Speed = fileInfo.Size / fileInfo.Duration
 		}
 		fileInfo.IsDownloaded = true
+		pushFilesUpdate <- struct{}{}
 	}
 }
 
@@ -465,26 +478,33 @@ func rpcCallAria2c(method string, id string, params []interface{}) (*Aria2JsonRP
 func main() {
 	//make dir and init
 	os.Mkdir("download", 0777)
-	files, _ := ioutil.ReadDir(DOWNLOAD_DIRNAME)
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		} else {
-			fileSize := file.Size()
-			filename := file.Name()
-			newFileInfo := FileInfo{
-				FileName:       filename,
-				SourceUrl:      "Local",
-				Size:           fileSize,
-				ContentLength:  fileSize,
-				StartTimeStamp: file.ModTime().Unix(),
-				Duration:       0,
-				Speed:          0,
-				IsDownloaded:   true,
-				IsError:        false}
-			fileInfos[filename] = &newFileInfo
+	// listFiles worker
+	go func() {
+		for {
+			time.Sleep(time.Second)
+			listFiles(DOWNLOAD_DIRNAME)
+			// 仅当有任务在下载时推送文件状态更新
+			for _, fileInfo := range fileInfos {
+				if !fileInfo.IsDownloaded {
+					pushFilesUpdate <- struct{}{}
+				}
+			}
 		}
-	}
+	}()
+	// push files stat worker
+	go func() {
+		for {
+			for conn := range connections {
+				err := conn.WriteJSON(fileInfos)
+				if err != nil {
+					delete(connections, conn)
+					log.Println("connection close", conn.RemoteAddr())
+					log.Printf("number of active connections %v\n", len(connections))
+				}
+			}
+			<-pushFilesUpdate
+		}
+	}()
 	// running aria2c with enable rpc once
 	if hasAria2c() && !isAria2cRunning {
 		go func() {

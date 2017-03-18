@@ -79,7 +79,7 @@ func init() {
 	if len(os.Args) > 1 {
 		bindAddr = os.Args[1]
 	} else {
-		panic("\nUsage: go run file_download_proxy.go addr:port\nExample:go run file_download_proxy.go 127.0.0.1:8000")
+		panic("\nUsage: go run main.go addr:port\nExample:go run main.go 127.0.0.1:8000")
 	}
 	//cache index template
 	indexTemplate, _ := template.ParseFiles("index.html")

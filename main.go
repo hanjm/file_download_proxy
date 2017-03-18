@@ -274,7 +274,8 @@ func fetchFileWorker() {
 			handleFetchFileError(fileInfo, errMessage)
 			continue
 		}
-		if strings.HasPrefix(sourceUrl, "http") {
+		switch {
+		case strings.HasPrefix(sourceUrl, "http"):
 			// http
 			//一些资源是动态生成的,请求第一次是chuncked stream,Header不带Content-Length,第二次请求就有Content-length
 			contentLength, attachmentName, err := getContentLengthAndAttachmentFilename(sourceUrl)
@@ -319,13 +320,15 @@ func fetchFileWorker() {
 				continue
 			}
 			cmd.Wait()
-		} else if strings.HasPrefix(sourceUrl, "magnet:?xt=urn:btih:") {
+		case strings.HasPrefix(sourceUrl, "magnet:?xt=urn:btih:"):
 			fileInfo = fetchMagnetContent(fileInfo)
-		} else {
+		default:
+
 			// 既不是http 也不是magnet
 			errMessage := "do not support this protocol,sourceUrl:"
 			handleFetchFileError(fileInfo, errMessage)
 			continue
+
 		}
 		// finish download pushFilesUpdate fileInfo
 		fileInfo.Duration = time.Now().Unix() - fileInfo.StartTimeStamp

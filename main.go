@@ -144,6 +144,7 @@ func fileOperationHandler(w http.ResponseWriter, req *http.Request) {
 			newFileInfo.FileName = getSafeFilename(downloadUrl)
 			fileInfos[newFileInfo.FileName] = newFileInfo
 			fileTasks <- newFileInfo
+			pushFilesUpdate <- struct{}{}
 			w.WriteHeader(http.StatusCreated)
 			response, _ = json.Marshal(map[string]string{"Message": "CREATE OK"})
 		}

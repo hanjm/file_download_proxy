@@ -432,7 +432,7 @@ func getSafeFilename(url string) string {
 	_, filenameInUrl := path.Split(url)
 	filename := strings.Join(safeFilenameRegexp.FindAllString(filenameInUrl, -1), "")
 	if lenOfFilename := len(filename); lenOfFilename > 50 {
-		filename = filename[lenOfFilename-50: lenOfFilename]
+		filename = filename[lenOfFilename-50 : lenOfFilename]
 	}
 	fileExt := path.Ext(filename)
 	return fmt.Sprintf("%s-%v%s", strings.Replace(filename, fileExt, "", -1), time.Now().Unix(), fileExt)

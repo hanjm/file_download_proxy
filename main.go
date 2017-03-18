@@ -20,29 +20,30 @@ import (
 	"time"
 )
 
-//3GB limit
-const LIMIT_SIZE = 3 * 1024 * 1024 * 1024
+const (
+	//3GB limit
+	LIMIT_SIZE = 3 * 1024 * 1024 * 1024
+	// relative dir
+	DOWNLOAD_DIRNAME = "download"
+	//aria2c 配置
+	ARIA2_ADD_URL_METHOD         = "aria2.addUri"
+	ARIA2_TELL_STATUS_METHOD     = "aria2.tellStatus"
+	ARIA2_REMOVE_DOWNLOAD_RESULT = "aria2.removeDownloadResult"
+)
 
-// relative dir
-const DOWNLOAD_DIRNAME = "download"
-
-//aria2c 配置
-const ARIA2_ADD_URL_METHOD = "aria2.addUri"
-const ARIA2_TELL_STATUS_METHOD = "aria2.tellStatus"
-const ARIA2_REMOVE_DOWNLOAD_RESULT = "aria2.removeDownloadResult"
-
-var bindAddr string
-var indexData bytes.Buffer
-var safeFilenameRegexp = regexp.MustCompile(`[\w\d.]+`)
-var headerFilenameRegexp = regexp.MustCompile(`[Cc]ontent-[Dd]isposition: ?attachment; ?filename=(.*)`)
-var contentLengthRegexp = regexp.MustCompile(`[Cc]ontent-[Ll]ength: ?(\d+)`)
-var testfileFilenameRegexp = regexp.MustCompile(`(test)?\d+[MmGg][Bb]?-.*`)
-var isAria2cRunning bool
-var fileTasks = make(chan *FileInfo, 20)
-var pushFilesUpdate = make(chan struct{})
-
-var connections = make(map[*websocket.Conn]struct{})
-var fileInfos = make(map[string]*FileInfo)
+var (
+	bindAddr               string
+	indexData              bytes.Buffer
+	isAria2cRunning        = false
+	safeFilenameRegexp     = regexp.MustCompile(`[\w\d.]+`)
+	headerFilenameRegexp   = regexp.MustCompile(`[Cc]ontent-[Dd]isposition: ?attachment; ?filename=(.*)`)
+	contentLengthRegexp    = regexp.MustCompile(`[Cc]ontent-[Ll]ength: ?(\d+)`)
+	testfileFilenameRegexp = regexp.MustCompile(`(test)?\d+[MmGg][Bb]?-.*`)
+	fileTasks              = make(chan *FileInfo, 20)
+	pushFilesUpdate        = make(chan struct{})
+	connections            = make(map[*websocket.Conn]struct{})
+	fileInfos              = make(map[string]*FileInfo)
+)
 
 type FileInfo struct {
 	FileName       string

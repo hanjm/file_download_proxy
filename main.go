@@ -205,11 +205,11 @@ func listFiles(dirname string) int64 {
 				fileInfo.Size = file.Size()
 			}
 			if (!fileInfo.IsDownloaded) && (!fileInfo.IsError) {
-				duration := time.Now().Unix() - fileInfo.StartTimeStamp
-				if duration <= 0 {
+				fileInfo.Duration = time.Now().Unix() - fileInfo.StartTimeStamp
+				if fileInfo.Duration <= 0 {
 					fileInfo.Duration = 1
 				}
-				fileInfo.Speed = fileInfo.Size / duration
+				fileInfo.Speed = fileInfo.Size / fileInfo.Duration
 			} else {
 				fileInfo.ContentLength = fileInfo.Size
 			}

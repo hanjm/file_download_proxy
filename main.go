@@ -205,9 +205,10 @@ func listFiles(dirname string) int64 {
 			}
 			if (!fileInfo.IsDownloaded) && (!fileInfo.IsError) {
 				duration := time.Now().Unix() - fileInfo.StartTimeStamp
-				if duration > 0 {
-					fileInfo.Speed = fileInfo.Size / duration
+				if duration <= 0 {
+					fileInfo.Duration = 1
 				}
+				fileInfo.Speed = fileInfo.Size / duration
 			} else {
 				fileInfo.ContentLength = fileInfo.Size
 			}
@@ -318,7 +319,7 @@ func fetchFileWorker() {
 			}
 			cmd.Wait()
 		} else if strings.HasPrefix(sourceUrl, "magnet:?xt=urn:btih:") {
-			fetchMagnetContent(fileInfo)
+			fileInfo = fetchMagnetContent(fileInfo)
 		} else {
 			// 既不是http 也不是magnet
 			errMessage := "do not support this protocol,sourceUrl:"
@@ -340,6 +341,7 @@ func fetchFileWorker() {
 				continue
 			}
 			fileInfo.Size = sysFileInfo.Size()
+			fileInfo.ContentLength = fileInfo.Size
 			fileInfo.Speed = fileInfo.Size / fileInfo.Duration
 		}
 		fileInfo.IsDownloaded = true
@@ -347,13 +349,13 @@ func fetchFileWorker() {
 	}
 }
 
-func fetchMagnetContent(fileInfo *FileInfo) {
+func fetchMagnetContent(fileInfo *FileInfo) *FileInfo {
 	//support magnet
 	// check aria2c
 	if !isAria2cRunning {
 		errMessage := "aria2c is not running,cannot download magnet"
 		handleFetchFileError(fileInfo, errMessage)
-		return
+		return fileInfo
 	}
 	//send json rpc
 	aria2TaskId := fileInfo.FileName
@@ -361,7 +363,7 @@ func fetchMagnetContent(fileInfo *FileInfo) {
 	if err != nil {
 		errMessage := fmt.Sprintf("rpc_call error when calling aria2.addUrl %v source_url:", err)
 		handleFetchFileError(fileInfo, errMessage)
-		return
+		return fileInfo
 	}
 	taskGid := response.Result
 	fileInfo.StartTimeStamp = time.Now().Unix()
@@ -374,7 +376,7 @@ func fetchMagnetContent(fileInfo *FileInfo) {
 		if err != nil {
 			errMessage := fmt.Sprintf("rpc_call error when calling aria2.tellStatus %v source_url:", err)
 			handleFetchFileError(fileInfo, errMessage)
-			return
+			return fileInfo
 		}
 		result := response.Result.(map[string]interface{})
 		taskStatus = result["status"].(string)
@@ -383,7 +385,7 @@ func fetchMagnetContent(fileInfo *FileInfo) {
 		if !(resultErrorMessage == nil || resultErrorMessage == "") {
 			errMessage := fmt.Sprintf("aria2 error:%v source_url:", resultErrorMessage)
 			handleFetchFileError(fileInfo, errMessage)
-			return
+			return fileInfo
 		}
 		//arai2c 返回的totalLength的很奇怪,单位不是byte?? 如有大佬知道,还望告知,谢谢
 		//totalLength := result["totalLength"].(string)
@@ -395,7 +397,7 @@ func fetchMagnetContent(fileInfo *FileInfo) {
 			if fileInfos[realFilename] != nil {
 				errMessage := fmt.Sprintf("file %v is exist. source_url:", realFilename)
 				handleFetchFileError(fileInfo, errMessage)
-				return
+				return fileInfo
 			}
 			fileInfos[realFilename] = &FileInfo{
 				FileName:       realFilename,
@@ -421,6 +423,7 @@ func fetchMagnetContent(fileInfo *FileInfo) {
 	if err != nil {
 		log.Printf("rpc_call error when calling aria2.removeDownloadResult %v\n", err)
 	}
+	return fileInfo
 }
 
 //utils

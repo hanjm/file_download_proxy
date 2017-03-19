@@ -19,6 +19,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -41,8 +42,20 @@ var (
 	testfileFilenameRegexp = regexp.MustCompile(`(test)?\d+[MmGg][Bb]?-.*`)
 	fileTasks              = make(chan *FileInfo, 20)
 	pushFilesUpdate        = make(chan struct{})
-	connections            = make(map[*websocket.Conn]struct{})
-	fileInfos              = make(map[string]*FileInfo)
+	connections            = &struct {
+		mutex *sync.Mutex
+		conns map[*websocket.Conn]struct{}
+	}{
+		mutex: new(sync.Mutex),
+		conns: make(map[*websocket.Conn]struct{}),
+	}
+	fileInfos = &struct {
+		mutex *sync.RWMutex
+		infos map[string]*FileInfo
+	}{
+		mutex: new(sync.RWMutex),
+		infos: make(map[string]*FileInfo),
+	}
 )
 
 type FileInfo struct {
@@ -110,7 +123,9 @@ func filesInfoHandler(w http.ResponseWriter, req *http.Request) {
 		log.Println("err when upgrader.Upgrade() ", err)
 		return
 	}
-	connections[conn] = struct{}{}
+	connections.mutex.Lock()
+	connections.conns[conn] = struct{}{}
+	connections.mutex.Unlock()
 	log.Println("new connection ", conn.RemoteAddr())
 	// 首次连接,推送文件信息
 	pushFilesUpdate <- struct{}{}
@@ -143,7 +158,9 @@ func fileOperationHandler(w http.ResponseWriter, req *http.Request) {
 			newFileInfo := new(FileInfo)
 			newFileInfo.SourceUrl = downloadUrl
 			newFileInfo.FileName = getSafeFilename(downloadUrl)
-			fileInfos[newFileInfo.FileName] = newFileInfo
+			fileInfos.mutex.Lock()
+			fileInfos.infos[newFileInfo.FileName] = newFileInfo
+			fileInfos.mutex.Unlock()
 			fileTasks <- newFileInfo
 			// 添加任务后,推送文件信息
 			pushFilesUpdate <- struct{}{}
@@ -182,7 +199,9 @@ func listFiles(dirname string) int64 {
 	files, _ := ioutil.ReadDir(dirname)
 	for _, file := range files {
 		var fileInfo *FileInfo
-		fileInfo = fileInfos[file.Name()]
+		fileInfos.mutex.RLock()
+		fileInfo = fileInfos.infos[file.Name()]
+		fileInfos.mutex.RUnlock()
 		if fileInfo == nil {
 			//rebuild new local file
 			fileSize := file.Size()
@@ -197,7 +216,9 @@ func listFiles(dirname string) int64 {
 				Speed:          0,
 				IsDownloaded:   true,
 				IsError:        false}
-			fileInfos[filename] = &newFileInfo
+			fileInfos.mutex.Lock()
+			fileInfos.infos[filename] = &newFileInfo
+			fileInfos.mutex.Unlock()
 			fileInfo = &newFileInfo
 		}
 		if fileInfo.Size != file.Size() {
@@ -218,7 +239,9 @@ func listFiles(dirname string) int64 {
 }
 
 func deleteFile(filename string) error {
-	fileInfo := fileInfos[filename]
+	fileInfos.mutex.RLock()
+	fileInfo := fileInfos.infos[filename]
+	fileInfos.mutex.RUnlock()
 	if fileInfo != nil {
 		if !fileInfo.IsDownloaded && !fileInfo.IsError {
 			return errors.New("file is downloading..")
@@ -227,10 +250,12 @@ func deleteFile(filename string) error {
 		if err != nil {
 			return err
 		}
-		delete(fileInfos, filename)
+		fileInfos.mutex.Lock()
+		delete(fileInfos.infos, filename)
+		fileInfos.mutex.Unlock()
 		return nil
 	}
-	log.Println(filename, fileInfos)
+	log.Println(filename, fileInfos.infos)
 	return errors.New("no such file or direcotry..")
 
 }
@@ -290,7 +315,8 @@ func fetchFileWorker() {
 			// if header has attach filename, update it
 			if attachmentName != "" {
 				attachmentName = getSafeFilename(attachmentName)
-				fileInfos[attachmentName] = &FileInfo{
+				fileInfos.mutex.Lock()
+				fileInfos.infos[attachmentName] = &FileInfo{
 					FileName:       attachmentName,
 					SourceUrl:      fileInfo.SourceUrl,
 					Size:           fileInfo.Size,
@@ -301,8 +327,9 @@ func fetchFileWorker() {
 					IsDownloaded:   fileInfo.IsDownloaded,
 					IsError:        fileInfo.IsError,
 				}
-				delete(fileInfos, fileInfo.FileName)
-				fileInfo = fileInfos[attachmentName]
+				delete(fileInfos.infos, fileInfo.FileName)
+				fileInfo = fileInfos.infos[attachmentName]
+				fileInfos.mutex.Unlock()
 			}
 			log.Printf("Create Download: length:%s source:%s filename:%s \n", getHumanSizeString(fileInfo.ContentLength), sourceUrl, fileInfo.FileName)
 			if contentLength > LIMIT_SIZE {
@@ -442,12 +469,13 @@ func fetchMagnetContent(fileInfo *FileInfo) *FileInfo {
 		if !updateFileName {
 			realFilename := strings.Replace(result["files"].([]interface{})[0].(map[string]interface{})["path"].(string), "[METADATA]", "", 1)
 			//检查同名文件以下载同名文件以免覆盖已下载文件
-			if fileInfos[realFilename] != nil {
+			fileInfos.mutex.Lock()
+			if fileInfos.infos[realFilename] != nil {
 				errMessage := fmt.Sprintf("file %v is exist. source_url:", realFilename)
 				handleFetchFileError(fileInfo, errMessage)
 				return fileInfo
 			}
-			fileInfos[realFilename] = &FileInfo{
+			fileInfos.infos[realFilename] = &FileInfo{
 				FileName:       realFilename,
 				SourceUrl:      fileInfo.SourceUrl,
 				Size:           fileInfo.Size,
@@ -458,9 +486,10 @@ func fetchMagnetContent(fileInfo *FileInfo) *FileInfo {
 				IsDownloaded:   fileInfo.IsDownloaded,
 				IsError:        fileInfo.IsError,
 			}
-			delete(fileInfos, fileInfo.FileName)
+			delete(fileInfos.infos, fileInfo.FileName)
+			fileInfo = fileInfos.infos[realFilename]
+			fileInfos.mutex.Unlock()
 			updateFileName = true
-			fileInfo = fileInfos[realFilename]
 		}
 		resultJson, _ := json.Marshal(response.Result)
 		log.Printf("aria2 status:%s\n", resultJson)
@@ -542,12 +571,14 @@ func main() {
 		for {
 			time.Sleep(time.Second)
 			// 当有文件在下载时, 推送文件信息
-			for _, fileInfo := range fileInfos {
+			fileInfos.mutex.RLock()
+			for _, fileInfo := range fileInfos.infos {
 				if !fileInfo.IsDownloaded {
 					flag = true
 					break
 				}
 			}
+			fileInfos.mutex.RUnlock()
 			if flag {
 				pushFilesUpdate <- struct{}{}
 				flag = false
@@ -557,15 +588,17 @@ func main() {
 	// push files stat worker
 	go func() {
 		for {
-			for conn := range connections {
-				err := conn.WriteJSON(fileInfos)
+			connections.mutex.Lock()
+			for conn := range connections.conns {
+				err := conn.WriteJSON(fileInfos.infos)
 				if err != nil {
-					delete(connections, conn)
+					delete(connections.conns, conn)
 					log.Println("connection close", conn.RemoteAddr())
 					conn.Close()
-					log.Printf("number of active connections %v\n", len(connections))
+					log.Printf("number of active connections %v\n", len(connections.conns))
 				}
 			}
+			connections.mutex.Unlock()
 			<-pushFilesUpdate
 		}
 	}()

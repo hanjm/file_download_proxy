@@ -257,7 +257,7 @@
                         $(".alert").addClass("alert-success").append(data).removeClass("alert-danger");
                     }).fail(function (xhr, option, err) {
                         $(".alert").addClass("alert-danger").append(xhr.responseText + "<br/>").removeClass("alert-success");
-                    })
+                    });
                 })
             }
             if (length >= row_counter) {
@@ -268,8 +268,8 @@
         }
         //        输入框内回车阻止提交form并点击下载
         $("#url-input-form").on("submit", function (e) {
-            e.preventDefaultEvent;
             document.getElementById("create_download_task").click();
+            e.preventDefault();
         });
         $("#create_download_task").on("click", function () {
             var $url_input = $("#url");
@@ -291,22 +291,22 @@
         });
         ws = new WebSocket(FILES_API);
         ws.onmessage = fetch_files_info;
-        setInterval(function () {
-            $("tr.bg-info").each(
-                function () {
-                    var $this = $(this);
-                    var content_length = parseInt($this.children(".content_length").text());
-                    var start_timestamp = parseInt($this.children(".start_timestamp").text());
-                    var speed = parseInt($this.children(".speed").text());
-                    var rate = parseInt($this.find("div.progress-number").text().trim("%"));
-                    var new_rate = (Date.now() - start_timestamp) / 1000 * speed / content_length * 100;
-//                        console.log(content_length, start_timestamp, rate, new_rate);
-                    if (new_rate > rate && new_rate < 100) {
-                        update_circular_progress($this, new_rate)
-                    }
-                }
-            )
-        }, 500)
+        //        setInterval(function () {
+        //            $("tr.bg-info").each(
+        //                function () {
+        //                    var $this = $(this);
+        //                    var content_length = parseInt($this.children(".content_length").text());
+        //                    var start_timestamp = parseInt($this.children(".start_timestamp").text());
+        //                    var speed = parseInt($this.children(".speed").text());
+        //                    var rate = parseInt($this.find("div.progress-number").text().trim("%"));
+        //                    var new_rate = (Date.now() - start_timestamp) / 1000 * speed / content_length * 100;
+        ////                        console.log(content_length, start_timestamp, rate, new_rate);
+        //                    if (new_rate > rate && new_rate < 100) {
+        //                        update_circular_progress($this, new_rate)
+        //                    }
+        //                }
+        //            )
+        //        }, 500)
     </script>
 
 </div>

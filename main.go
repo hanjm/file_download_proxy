@@ -145,6 +145,7 @@ func fileOperationHandler(w http.ResponseWriter, req *http.Request) {
 			newFileInfo.FileName = getSafeFilename(downloadUrl)
 			fileInfos[newFileInfo.FileName] = newFileInfo
 			fileTasks <- newFileInfo
+			// 添加任务后,推送文件信息
 			pushFilesUpdate <- struct{}{}
 			w.WriteHeader(http.StatusCreated)
 			response, _ = json.Marshal(map[string]string{"Message": "CREATE OK"})
@@ -180,42 +181,38 @@ func listFiles(dirname string) int64 {
 	var fileSize int64
 	files, _ := ioutil.ReadDir(dirname)
 	for _, file := range files {
-		if file.IsDir() {
-			continue
-		} else {
-			var fileInfo *FileInfo
-			fileInfo = fileInfos[file.Name()]
-			if fileInfo == nil {
-				//rebuild new local file
-				fileSize := file.Size()
-				filename := file.Name()
-				newFileInfo := FileInfo{
-					FileName:       filename,
-					SourceUrl:      "Local",
-					Size:           fileSize,
-					ContentLength:  fileSize,
-					StartTimeStamp: file.ModTime().Unix(),
-					Duration:       0,
-					Speed:          0,
-					IsDownloaded:   true,
-					IsError:        false}
-				fileInfos[filename] = &newFileInfo
-				fileInfo = &newFileInfo
-			}
-			if fileInfo.Size != file.Size() {
-				fileInfo.Size = file.Size()
-			}
-			if (!fileInfo.IsDownloaded) && (!fileInfo.IsError) {
-				duration := time.Now().Unix() - fileInfo.StartTimeStamp
-				if duration <= 0 {
-					duration = 1
-				}
-				fileInfo.Speed = fileInfo.Size / duration
-			} else {
-				fileInfo.ContentLength = fileInfo.Size
-			}
-			fileSize += int64(math.Max(float64(file.Size()), float64(fileInfo.ContentLength)))
+		var fileInfo *FileInfo
+		fileInfo = fileInfos[file.Name()]
+		if fileInfo == nil {
+			//rebuild new local file
+			fileSize := file.Size()
+			filename := file.Name()
+			newFileInfo := FileInfo{
+				FileName:       filename,
+				SourceUrl:      "Local",
+				Size:           fileSize,
+				ContentLength:  fileSize,
+				StartTimeStamp: file.ModTime().Unix(),
+				Duration:       0,
+				Speed:          0,
+				IsDownloaded:   true,
+				IsError:        false}
+			fileInfos[filename] = &newFileInfo
+			fileInfo = &newFileInfo
 		}
+		if fileInfo.Size != file.Size() {
+			fileInfo.Size = file.Size()
+		}
+		if (!fileInfo.IsDownloaded) && (!fileInfo.IsError) {
+			duration := time.Now().Unix() - fileInfo.StartTimeStamp
+			if duration <= 0 {
+				duration = 1
+			}
+			fileInfo.Speed = fileInfo.Size / duration
+		} else {
+			fileInfo.ContentLength = fileInfo.Size
+		}
+		fileSize += int64(math.Max(float64(file.Size()), float64(fileInfo.ContentLength)))
 	}
 	return fileSize
 }
@@ -279,7 +276,7 @@ func fetchFileWorker() {
 		case strings.HasPrefix(sourceUrl, "http"):
 			// http
 			contentLength, attachmentName, err := getContentLengthAndAttachmentFilename(httpClient, sourceUrl)
-			if contentLength != 0 {
+			if contentLength > 0 {
 				fileInfo.ContentLength = contentLength
 			} else {
 				//一些资源是动态生成的,请求第一次是chunked stream,Header不带Content-Length,第二次请求就有Content-length
@@ -290,7 +287,7 @@ func fetchFileWorker() {
 				handleFetchFileError(fileInfo, errMessage)
 				continue
 			}
-			// if header has attach filename pushFilesUpdate it
+			// if header has attach filename, update it
 			if attachmentName != "" {
 				attachmentName = getSafeFilename(attachmentName)
 				fileInfos[attachmentName] = &FileInfo{
@@ -337,7 +334,6 @@ func fetchFileWorker() {
 			buf := make([]byte, bufSize)
 			size := 0
 			readSize := 0
-			writeSize := 0
 			for i := 0; ; i++ {
 				readSize, err = bodyReader.Read(buf)
 				if err != nil {
@@ -350,9 +346,9 @@ func fetchFileWorker() {
 						break
 					}
 				}
-				writeSize, err = fp.Write(buf[:readSize])
-				size += writeSize
-				if i%100 == 0 {
+				_, err = fp.Write(buf[:readSize])
+				size += readSize
+				if i%1000 == 0 {
 					fileInfo.Size = int64(size)
 					duration := time.Now().Unix() - fileInfo.StartTimeStamp
 					if duration == 0 {
@@ -396,6 +392,7 @@ func fetchFileWorker() {
 			fileInfo.Speed = fileInfo.Size / fileInfo.Duration
 		}
 		fileInfo.IsDownloaded = true
+		// 下载完成后, 推送文件信息
 		pushFilesUpdate <- struct{}{}
 	}
 }
@@ -467,7 +464,13 @@ func fetchMagnetContent(fileInfo *FileInfo) *FileInfo {
 		}
 		resultJson, _ := json.Marshal(response.Result)
 		log.Printf("aria2 status:%s\n", resultJson)
-
+		// update fileInfo.size
+		sysFileInfo, err := os.Stat(DOWNLOAD_DIRNAME + "/" + fileInfo.FileName)
+		if err != nil {
+			handleFetchFileError(fileInfo, err.Error())
+			continue
+		}
+		fileInfo.Size = sysFileInfo.Size()
 	}
 	//aria2.removeDownloadResult
 	response, err = rpcCallAria2c(ARIA2_REMOVE_DOWNLOAD_RESULT, aria2TaskId, []interface{}{taskGid})
@@ -532,16 +535,22 @@ func rpcCallAria2c(method string, id string, params []interface{}) (*Aria2JsonRP
 func main() {
 	//make dir and init
 	os.Mkdir("download", 0777)
-	// listFiles worker
+	listFiles(DOWNLOAD_DIRNAME)
+	// fileInfos watcher worker
 	go func() {
+		flag := false
 		for {
 			time.Sleep(time.Second)
-			listFiles(DOWNLOAD_DIRNAME)
-			// 仅当有任务在下载时推送文件状态更新
+			// 当有文件在下载时, 推送文件信息
 			for _, fileInfo := range fileInfos {
 				if !fileInfo.IsDownloaded {
-					pushFilesUpdate <- struct{}{}
+					flag = true
+					break
 				}
+			}
+			if flag {
+				pushFilesUpdate <- struct{}{}
+				flag = false
 			}
 		}
 	}()
@@ -553,6 +562,7 @@ func main() {
 				if err != nil {
 					delete(connections, conn)
 					log.Println("connection close", conn.RemoteAddr())
+					conn.Close()
 					log.Printf("number of active connections %v\n", len(connections))
 				}
 			}

@@ -10,12 +10,12 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -35,9 +35,7 @@ var (
 	bindAddr               string
 	indexData              bytes.Buffer
 	isAria2cRunning        = false
-	safeFilenameRegexp     = regexp.MustCompile(`[\w\d.]+`)
-	headerFilenameRegexp   = regexp.MustCompile(`[Cc]ontent-[Dd]isposition: ?attachment; ?filename=(.*)`)
-	contentLengthRegexp    = regexp.MustCompile(`[Cc]ontent-[Ll]ength: ?(\d+)`)
+	safeFilenameRegexp     = regexp.MustCompile(`[\w\d\-.]+`)
 	testfileFilenameRegexp = regexp.MustCompile(`(test)?\d+[MmGg][Bb]?-.*`)
 	fileTasks              = make(chan *FileInfo, 20)
 	pushFilesUpdate        = make(chan struct{})
@@ -238,26 +236,26 @@ func deleteFile(filename string) error {
 
 }
 func getContentLengthAndAttachmentFilename(url string) (int64, string, error) {
-	output, err := exec.Command("curl", "-IL", url).Output()
+	var netTransport = &http.Transport{
+		Dial: (&net.Dialer{
+			Timeout: 10 * time.Second,
+		}).Dial,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
+	var netClient = &http.Client{
+		Timeout:   time.Second * 20,
+		Transport: netTransport,
+	}
+	resp, err := netClient.Get(url)
 	if err != nil {
 		return 0, "", err
 	}
-	outputStr := string(output)
-	//parse contentLength
-	var contentLength int64
-	contentLengths := contentLengthRegexp.FindAllStringSubmatch(outputStr, -1)
-	if contentLengths != nil {
-		contentLength, _ = strconv.ParseInt(contentLengths[len(contentLengths)-1][1], 10, 64)
-	} else {
-		contentLength = 0
-	}
-	// parse attachmentName
+	contentLength := resp.ContentLength
+	contentDisposition := strings.SplitN(resp.Header.Get("Content-Disposition"), "=", 2)
+	resp.Body.Close()
 	var attachmentName string
-	attachmentNames := headerFilenameRegexp.FindAllStringSubmatch(outputStr, -1)
-	if attachmentNames != nil {
-		attachmentName = attachmentNames[len(attachmentNames)-1][1]
-	} else {
-		attachmentName = ""
+	if len(contentDisposition) > 1 {
+		attachmentName = contentDisposition[1]
 	}
 	return contentLength, attachmentName, nil
 }
@@ -278,11 +276,11 @@ func fetchFileWorker() {
 		switch {
 		case strings.HasPrefix(sourceUrl, "http"):
 			// http
-			//一些资源是动态生成的,请求第一次是chuncked stream,Header不带Content-Length,第二次请求就有Content-length
 			contentLength, attachmentName, err := getContentLengthAndAttachmentFilename(sourceUrl)
 			if contentLength != 0 {
 				fileInfo.ContentLength = contentLength
 			} else {
+				//一些资源是动态生成的,请求第一次是chunked stream,Header不带Content-Length,第二次请求就有Content-length
 				contentLength, attachmentName, err = getContentLengthAndAttachmentFilename(sourceUrl)
 			}
 			if err != nil {

@@ -290,7 +290,6 @@
             }
         });
         ws = new WebSocket(FILES_API);
-        ws.onopen = fetch_files_info;
         ws.onmessage = fetch_files_info;
         setInterval(function () {
             $("tr.bg-info").each(

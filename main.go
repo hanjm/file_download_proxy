@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
 	"html/template"
+	"io"
 	"io/ioutil"
 	"log"
 	"math"
@@ -126,7 +128,7 @@ func fileOperationHandler(w http.ResponseWriter, req *http.Request) {
 		log.Printf("Download %v", filename)
 		http.Redirect(w, req, "/download/"+filename, http.StatusTemporaryRedirect)
 	case "POST":
-		downloadUrl := req.PostFormValue("url")
+		downloadUrl := strings.TrimSpace(req.PostFormValue("url"))
 		if downloadUrl == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -204,11 +206,11 @@ func listFiles(dirname string) int64 {
 				fileInfo.Size = file.Size()
 			}
 			if (!fileInfo.IsDownloaded) && (!fileInfo.IsError) {
-				fileInfo.Duration = time.Now().Unix() - fileInfo.StartTimeStamp
-				if fileInfo.Duration <= 0 {
-					fileInfo.Duration = 1
+				duration := time.Now().Unix() - fileInfo.StartTimeStamp
+				if duration <= 0 {
+					duration = 1
 				}
-				fileInfo.Speed = fileInfo.Size / fileInfo.Duration
+				fileInfo.Speed = fileInfo.Size / duration
 			} else {
 				fileInfo.ContentLength = fileInfo.Size
 			}
@@ -235,18 +237,8 @@ func deleteFile(filename string) error {
 	return errors.New("no such file or direcotry..")
 
 }
-func getContentLengthAndAttachmentFilename(url string) (int64, string, error) {
-	var netTransport = &http.Transport{
-		Dial: (&net.Dialer{
-			Timeout: 10 * time.Second,
-		}).Dial,
-		TLSHandshakeTimeout: 10 * time.Second,
-	}
-	var netClient = &http.Client{
-		Timeout:   time.Second * 20,
-		Transport: netTransport,
-	}
-	resp, err := netClient.Get(url)
+func getContentLengthAndAttachmentFilename(httpClient *http.Client, url string) (int64, string, error) {
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return 0, "", err
 	}
@@ -266,6 +258,16 @@ func handleFetchFileError(fileInfo *FileInfo, errMessage string) {
 	fileInfo.SourceUrl += errMessage
 }
 func fetchFileWorker() {
+	var netTransport = &http.Transport{
+		Dial: (&net.Dialer{
+			Timeout: 10 * time.Second,
+		}).Dial,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
+	var httpClient = &http.Client{
+		Timeout:   0,
+		Transport: netTransport,
+	}
 	for fileInfo := range fileTasks {
 		sourceUrl := fileInfo.SourceUrl
 		if testfileFilenameRegexp.MatchString(fileInfo.FileName) {
@@ -276,15 +278,15 @@ func fetchFileWorker() {
 		switch {
 		case strings.HasPrefix(sourceUrl, "http"):
 			// http
-			contentLength, attachmentName, err := getContentLengthAndAttachmentFilename(sourceUrl)
+			contentLength, attachmentName, err := getContentLengthAndAttachmentFilename(httpClient, sourceUrl)
 			if contentLength != 0 {
 				fileInfo.ContentLength = contentLength
 			} else {
 				//一些资源是动态生成的,请求第一次是chunked stream,Header不带Content-Length,第二次请求就有Content-length
-				contentLength, attachmentName, err = getContentLengthAndAttachmentFilename(sourceUrl)
+				contentLength, attachmentName, err = getContentLengthAndAttachmentFilename(httpClient, sourceUrl)
 			}
 			if err != nil {
-				errMessage := fmt.Sprintf("curl error:%v sourceUrl:", err)
+				errMessage := fmt.Sprintf("getContentLength error:%v sourceUrl:", err)
 				handleFetchFileError(fileInfo, errMessage)
 				continue
 			}
@@ -312,19 +314,65 @@ func fetchFileWorker() {
 				continue
 			}
 			fileInfo.StartTimeStamp = time.Now().Unix()
-			cmd := exec.Command("wget", "-O", "download/"+fileInfo.FileName, sourceUrl)
-			if err := cmd.Start(); err != nil {
-				errMessage := fmt.Sprintf("wget error:%v sourceUrl:", err)
+			// write file
+			resp, err := httpClient.Get(fileInfo.SourceUrl)
+			if err != nil {
+				errMessage := fmt.Sprintf("request error %v\n", err)
 				handleFetchFileError(fileInfo, errMessage)
 				continue
 			}
-			cmd.Wait()
+			fp, err := os.Create(DOWNLOAD_DIRNAME + "/" + fileInfo.FileName)
+			if err != nil {
+				errMessage := fmt.Sprintf("create file error %v\n", err)
+				handleFetchFileError(fileInfo, errMessage)
+				continue
+			}
+			bufSize := 4096
+			bodyReader := bufio.NewReaderSize(resp.Body, bufSize)
+			if err != nil {
+				errMessage := fmt.Sprintf("create file error %v\n", err)
+				handleFetchFileError(fileInfo, errMessage)
+				continue
+			}
+			buf := make([]byte, bufSize)
+			size := 0
+			readSize := 0
+			writeSize := 0
+			for i := 0; ; i++ {
+				readSize, err = bodyReader.Read(buf)
+				if err != nil {
+					if err == io.EOF {
+						fp.Write(buf[:readSize])
+						break
+					} else {
+						errMessage := fmt.Sprintf("body read err%v\n", err)
+						handleFetchFileError(fileInfo, errMessage)
+						break
+					}
+				}
+				writeSize, err = fp.Write(buf[:readSize])
+				size += writeSize
+				if i%100 == 0 {
+					fileInfo.Size = int64(size)
+					duration := time.Now().Unix() - fileInfo.StartTimeStamp
+					if duration == 0 {
+						duration = 1
+					}
+					fileInfo.Speed = fileInfo.Size / duration
+				}
+				if err != nil {
+					errMessage := fmt.Sprintf("body write err:%v\n", err)
+					handleFetchFileError(fileInfo, errMessage)
+					break
+				}
+			}
+			fp.Close()
+			resp.Body.Close()
 		case strings.HasPrefix(sourceUrl, "magnet:?xt=urn:btih:"):
 			fileInfo = fetchMagnetContent(fileInfo)
 		default:
-
 			// 既不是http 也不是magnet
-			errMessage := "do not support this protocol,sourceUrl:"
+			errMessage := "not support this protocol,sourceUrl:"
 			handleFetchFileError(fileInfo, errMessage)
 			continue
 

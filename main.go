@@ -279,12 +279,13 @@ func handleFetchFileError(fileInfo *FileInfo, errMessage string) {
 	fileInfo.IsError = true
 	fileInfo.SourceUrl += errMessage
 }
+
 func fetchFileWorker() {
 	var netTransport = &http.Transport{
 		Dial: (&net.Dialer{
-			Timeout: 10 * time.Second,
+			Timeout: 20 * time.Second,
 		}).Dial,
-		TLSHandshakeTimeout: 10 * time.Second,
+		TLSHandshakeTimeout: 20 * time.Second,
 	}
 	var httpClient = &http.Client{
 		Timeout:   0,
@@ -293,112 +294,18 @@ func fetchFileWorker() {
 	for fileInfo := range fileTasks {
 		sourceUrl := fileInfo.SourceUrl
 		if testfileFilenameRegexp.MatchString(fileInfo.FileName) {
-			errMessage := "refused to download testfile:"
-			handleFetchFileError(fileInfo, errMessage)
+			handleFetchFileError(fileInfo, "refused to download testfile:")
 			continue
 		}
 		switch {
 		case strings.HasPrefix(sourceUrl, "http"):
-			// http
-			contentLength, attachmentName, err := getContentLengthAndAttachmentFilename(httpClient, sourceUrl)
-			if contentLength > 0 {
-				fileInfo.ContentLength = contentLength
-			} else {
-				//一些资源是动态生成的,请求第一次是chunked stream,Header不带Content-Length,第二次请求就有Content-length
-				contentLength, attachmentName, err = getContentLengthAndAttachmentFilename(httpClient, sourceUrl)
-			}
-			if err != nil {
-				errMessage := fmt.Sprintf("getContentLength error:%v sourceUrl:", err)
-				handleFetchFileError(fileInfo, errMessage)
-				continue
-			}
-			// if header has attach filename, update it
-			if attachmentName != "" {
-				attachmentName = getSafeFilename(attachmentName)
-				fileInfos.mutex.Lock()
-				fileInfos.infos[attachmentName] = &FileInfo{
-					FileName:       attachmentName,
-					SourceUrl:      fileInfo.SourceUrl,
-					Size:           fileInfo.Size,
-					ContentLength:  fileInfo.ContentLength,
-					StartTimeStamp: fileInfo.StartTimeStamp,
-					Duration:       fileInfo.Duration,
-					Speed:          fileInfo.Speed,
-					IsDownloaded:   fileInfo.IsDownloaded,
-					IsError:        fileInfo.IsError,
-				}
-				delete(fileInfos.infos, fileInfo.FileName)
-				fileInfo = fileInfos.infos[attachmentName]
-				fileInfos.mutex.Unlock()
-			}
-			log.Printf("Create Download: length:%s source:%s filename:%s \n", getHumanSizeString(fileInfo.ContentLength), sourceUrl, fileInfo.FileName)
-			if contentLength > LIMIT_SIZE {
-				errMessage := "The content length of sourceUrl is too big :"
-				handleFetchFileError(fileInfo, errMessage)
-				continue
-			}
-			fileInfo.StartTimeStamp = time.Now().Unix()
-			// write file
-			resp, err := httpClient.Get(fileInfo.SourceUrl)
-			if err != nil {
-				errMessage := fmt.Sprintf("request error %v\n", err)
-				handleFetchFileError(fileInfo, errMessage)
-				continue
-			}
-			fp, err := os.Create(DOWNLOAD_DIRNAME + "/" + fileInfo.FileName)
-			if err != nil {
-				errMessage := fmt.Sprintf("create file error %v\n", err)
-				handleFetchFileError(fileInfo, errMessage)
-				continue
-			}
-			bufSize := 4096
-			bodyReader := bufio.NewReaderSize(resp.Body, bufSize)
-			if err != nil {
-				errMessage := fmt.Sprintf("create file error %v\n", err)
-				handleFetchFileError(fileInfo, errMessage)
-				continue
-			}
-			buf := make([]byte, bufSize)
-			size := 0
-			readSize := 0
-			for i := 0; ; i++ {
-				readSize, err = bodyReader.Read(buf)
-				if err != nil {
-					if err == io.EOF {
-						fp.Write(buf[:readSize])
-						break
-					} else {
-						errMessage := fmt.Sprintf("body read err%v\n", err)
-						handleFetchFileError(fileInfo, errMessage)
-						break
-					}
-				}
-				_, err = fp.Write(buf[:readSize])
-				size += readSize
-				if i%1000 == 0 {
-					fileInfo.Size = int64(size)
-					duration := time.Now().Unix() - fileInfo.StartTimeStamp
-					if duration == 0 {
-						duration = 1
-					}
-					fileInfo.Speed = fileInfo.Size / duration
-				}
-				if err != nil {
-					errMessage := fmt.Sprintf("body write err:%v\n", err)
-					handleFetchFileError(fileInfo, errMessage)
-					break
-				}
-			}
-			fp.Close()
-			resp.Body.Close()
+			fileInfo = fetchHTTPContent(httpClient, fileInfo)
 		case strings.HasPrefix(sourceUrl, "magnet:?xt=urn:btih:"):
 			fileInfo = fetchMagnetContent(fileInfo)
 		default:
 			// 既不是http 也不是magnet
-			errMessage := "not support this protocol,sourceUrl:"
-			handleFetchFileError(fileInfo, errMessage)
+			handleFetchFileError(fileInfo, "not support this protocol,sourceUrl:")
 			continue
-
 		}
 		// finish download pushFilesUpdate fileInfo
 		fileInfo.Duration = time.Now().Unix() - fileInfo.StartTimeStamp
@@ -422,6 +329,103 @@ func fetchFileWorker() {
 		// 下载完成后, 推送文件信息
 		pushFilesUpdate <- struct{}{}
 	}
+}
+
+func fetchHTTPContent(httpClient *http.Client, fileInfo *FileInfo) *FileInfo {
+	// http
+	fileInfo.StartTimeStamp = time.Now().Unix()
+	resp, err := httpClient.Get(fileInfo.SourceUrl)
+	if err != nil {
+		handleFetchFileError(fileInfo, "http.Client error"+err.Error())
+		return fileInfo
+	}
+	fileInfo.ContentLength = resp.ContentLength
+	contentDisposition := strings.SplitN(resp.Header.Get("Content-Disposition"), "=", 2)
+	var attachmentName string
+	if len(contentDisposition) > 1 {
+		attachmentName = contentDisposition[1]
+	}
+	if fileInfo.ContentLength <= 0 {
+		//一些资源是动态生成的,请求第一次是chunked stream,Header不带Content-Length,第二次请求就有Content-length
+		resp, err := httpClient.Get(fileInfo.SourceUrl)
+		if err != nil {
+			handleFetchFileError(fileInfo, "http.Client error"+err.Error())
+			return fileInfo
+		}
+		fileInfo.ContentLength = resp.ContentLength
+	}
+	// if header has attach filename, update it
+	if attachmentName != "" {
+		attachmentName = getSafeFilename(attachmentName)
+		fileInfos.mutex.Lock()
+		fileInfos.infos[attachmentName] = &FileInfo{
+			FileName:       attachmentName,
+			SourceUrl:      fileInfo.SourceUrl,
+			Size:           fileInfo.Size,
+			ContentLength:  fileInfo.ContentLength,
+			StartTimeStamp: fileInfo.StartTimeStamp,
+			Duration:       fileInfo.Duration,
+			Speed:          fileInfo.Speed,
+			IsDownloaded:   fileInfo.IsDownloaded,
+			IsError:        fileInfo.IsError,
+		}
+		delete(fileInfos.infos, fileInfo.FileName)
+		fileInfo = fileInfos.infos[attachmentName]
+		fileInfos.mutex.Unlock()
+	}
+	log.Printf("Create Download: length:%s source:%s filename:%s \n", getHumanSizeString(fileInfo.ContentLength), fileInfo.SourceUrl, fileInfo.FileName)
+	if fileInfo.ContentLength > LIMIT_SIZE {
+		handleFetchFileError(fileInfo, "The content length of sourceUrl is too big :")
+		return fileInfo
+	}
+	// write file
+	fp, err := os.Create(DOWNLOAD_DIRNAME + "/" + fileInfo.FileName)
+	if err != nil {
+		errMessage := fmt.Sprintf("create file error %v\n", err)
+		handleFetchFileError(fileInfo, errMessage)
+		return fileInfo
+	}
+	bufSize := 4096
+	bodyReader := bufio.NewReaderSize(resp.Body, bufSize)
+	if err != nil {
+		errMessage := fmt.Sprintf("create file error %v\n", err)
+		handleFetchFileError(fileInfo, errMessage)
+		return fileInfo
+	}
+	buf := make([]byte, bufSize)
+	size := 0
+	readSize := 0
+	for i := 0; ; i++ {
+		readSize, err = bodyReader.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				fp.Write(buf[:readSize])
+				break
+			} else {
+				errMessage := fmt.Sprintf("body read err%v\n", err)
+				handleFetchFileError(fileInfo, errMessage)
+				break
+			}
+		}
+		_, err = fp.Write(buf[:readSize])
+		size += readSize
+		if i%1000 == 0 {
+			fileInfo.Size = int64(size)
+			duration := time.Now().Unix() - fileInfo.StartTimeStamp
+			if duration == 0 {
+				duration = 1
+			}
+			fileInfo.Speed = fileInfo.Size / duration
+		}
+		if err != nil {
+			errMessage := fmt.Sprintf("body write err:%v\n", err)
+			handleFetchFileError(fileInfo, errMessage)
+			break
+		}
+	}
+	fp.Close()
+	resp.Body.Close()
+	return fileInfo
 }
 
 func fetchMagnetContent(fileInfo *FileInfo) *FileInfo {

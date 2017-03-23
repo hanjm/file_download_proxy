@@ -1,7 +1,6 @@
 # 文件下载代理/离线下载服务
-- 使用Golang net/http包实现
-- 显示下载速度 css进度环
 - 支持类型: http[s](via http.Client)/磁力链接(via aria2 jsonrpc interface)
+- 显示下载速度 css进度环
 - 2017-03改进: 文件下载函数复用Goroutines,代替原来的直接go func
 - 2017-03-17更新: 使用channel + websocket实现仅当有文件在下载时服务端推送文件状态更新,代替原来消耗过大的客户端ajax轮询.
 

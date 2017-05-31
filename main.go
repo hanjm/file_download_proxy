@@ -16,10 +16,12 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path"
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -97,10 +99,9 @@ func init() {
 	}
 	//cache index template
 	indexTemplate, _ := template.ParseFiles("index.html")
-	type Context struct {
+	context := struct {
 		BindAddr string
-	}
-	context := Context{BindAddr: bindAddr}
+	}{BindAddr: bindAddr}
 	indexTemplate.Execute(&indexData, context)
 	// 10 Goroutines
 	for i := 0; i < 10; i++ {
@@ -518,7 +519,7 @@ func getSafeFilename(url string) string {
 	_, filenameInUrl := path.Split(url)
 	filename := strings.Join(safeFilenameRegexp.FindAllString(filenameInUrl, -1), "")
 	if lenOfFilename := len(filename); lenOfFilename > 50 {
-		filename = filename[lenOfFilename-50 : lenOfFilename]
+		filename = filename[lenOfFilename-50: lenOfFilename]
 	}
 	fileExt := path.Ext(filename)
 	return fmt.Sprintf("%s-%v%s", strings.Replace(filename, fileExt, "", -1), time.Now().Unix(), fileExt)
@@ -622,6 +623,21 @@ func main() {
 	} else {
 		log.Println("aria2c not install,cannot download magnet")
 	}
+	// signal SIGHUP reload index.html
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGHUP)
+		for {
+			<-c
+			indexTemplate, _ := template.ParseFiles("index.html")
+			context := struct {
+				BindAddr string
+			}{BindAddr: bindAddr}
+			indexData.Reset()
+			indexTemplate.Execute(&indexData, context)
+			log.Println("reloaded index.html")
+		}
+	}()
 	//http server
 	//http.Handle("/static/", http.StripPrefix("/static", http.FileServer(http.Dir("static/"))))
 	http.Handle("/download/", http.StripPrefix("/download", http.FileServer(http.Dir("download"))))

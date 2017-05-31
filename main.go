@@ -357,22 +357,24 @@ func fetchHTTPContent(httpClient *http.Client, fileInfo *FileInfo) *FileInfo {
 	}
 	// if header has attach filename, update it
 	if attachmentName != "" {
-		attachmentName = getSafeFilename(attachmentName)
-		fileInfos.mutex.Lock()
-		fileInfos.infos[attachmentName] = &FileInfo{
-			FileName:       attachmentName,
-			SourceUrl:      fileInfo.SourceUrl,
-			Size:           fileInfo.Size,
-			ContentLength:  fileInfo.ContentLength,
-			StartTimeStamp: fileInfo.StartTimeStamp,
-			Duration:       fileInfo.Duration,
-			Speed:          fileInfo.Speed,
-			IsDownloaded:   fileInfo.IsDownloaded,
-			IsError:        fileInfo.IsError,
+		attachmentName2 := getSafeFilename(attachmentName)
+		if attachmentName2 != attachmentName {
+			fileInfos.mutex.Lock()
+			fileInfos.infos[attachmentName] = &FileInfo{
+				FileName:       attachmentName2,
+				SourceUrl:      fileInfo.SourceUrl,
+				Size:           fileInfo.Size,
+				ContentLength:  fileInfo.ContentLength,
+				StartTimeStamp: fileInfo.StartTimeStamp,
+				Duration:       fileInfo.Duration,
+				Speed:          fileInfo.Speed,
+				IsDownloaded:   fileInfo.IsDownloaded,
+				IsError:        fileInfo.IsError,
+			}
+			delete(fileInfos.infos, fileInfo.FileName)
+			fileInfo = fileInfos.infos[attachmentName2]
+			fileInfos.mutex.Unlock()
 		}
-		delete(fileInfos.infos, fileInfo.FileName)
-		fileInfo = fileInfos.infos[attachmentName]
-		fileInfos.mutex.Unlock()
 	}
 	log.Printf("Create Download: length:%s source:%s filename:%s \n", getHumanSizeString(fileInfo.ContentLength), fileInfo.SourceUrl, fileInfo.FileName)
 	if fileInfo.ContentLength > LIMIT_SIZE {

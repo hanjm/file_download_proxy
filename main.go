@@ -91,6 +91,7 @@ type Aria2JsonRPCResp struct {
 }
 
 func init() {
+	log.SetFlags(log.Lshortfile | log.LstdFlags)
 	//parse addr:port args
 	if len(os.Args) > 1 {
 		bindAddr = os.Args[1]
@@ -360,7 +361,7 @@ func fetchHTTPContent(httpClient *http.Client, fileInfo *FileInfo) *FileInfo {
 		attachmentName2 := getSafeFilename(attachmentName)
 		if attachmentName2 != attachmentName {
 			fileInfos.mutex.Lock()
-			fileInfos.infos[attachmentName] = &FileInfo{
+			fileInfos.infos[attachmentName2] = &FileInfo{
 				FileName:       attachmentName2,
 				SourceUrl:      fileInfo.SourceUrl,
 				Size:           fileInfo.Size,
@@ -628,16 +629,40 @@ func main() {
 	// signal SIGHUP reload index.html
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGHUP)
+		signal.Notify(c, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT, syscall.SIGSTOP, syscall.SIGKILL)
 		for {
-			<-c
-			indexTemplate, _ := template.ParseFiles("index.html")
-			context := struct {
-				BindAddr string
-			}{BindAddr: bindAddr}
-			indexData.Reset()
-			indexTemplate.Execute(&indexData, context)
-			log.Println("reloaded index.html")
+			s := <-c
+			switch s {
+			case syscall.SIGHUP:
+				indexTemplate, _ := template.ParseFiles("index.html")
+				context := struct {
+					BindAddr string
+				}{BindAddr: bindAddr}
+				indexData.Reset()
+				indexTemplate.Execute(&indexData, context)
+				log.Println("reloaded index.html")
+			case syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT, syscall.SIGSTOP, syscall.SIGKILL:
+				data, err := json.Marshal(fileInfos.infos)
+				if err != nil {
+					log.Println("json.Marshal error")
+					os.Exit(1)
+				}
+				os.Remove("db.json")
+				fp, err := os.Create("db.json")
+				if err != nil {
+					log.Println("os.Create error")
+					os.Exit(1)
+				}
+				_, err = fp.Write(data)
+				if err != nil {
+					log.Println("fp.Write error")
+					os.Exit(1)
+				}
+				fp.Close()
+				log.Println("saved db.json")
+				os.Exit(0)
+			}
+
 		}
 	}()
 	//http server

@@ -1,4 +1,4 @@
-# 文件下载代理/离线下载服务
+# 文件离线下载服务
 - 支持类型: http[s](via http.Client)/磁力链接(via aria2 jsonrpc interface)
 - 显示下载速度 css进度环
 - 2017-03改进: 文件下载函数复用Goroutines,代替原来的直接go func
@@ -11,8 +11,8 @@ Demo:http://23.83.230.242/file_download_proxy/
 ```shell
 go get github.com/gorilla/websocket
 
-Usage: go run main.go addr:port
-Example: go run main.go 127.0.0.1:8000
+Usage: go build -o fdp && ./fdp addr:port
+Example: go build -o fdp && ./fdp 127.0.0.1:8000
 ```
 然后访问: http://127.0.0.1:8000/file_download_proxy/
 
@@ -23,4 +23,4 @@ Example: go run main.go 127.0.0.1:8000
 https://github.com/hanjm/file_download_proxy/blob/master/main.go#L28
 2. testfile 限制
 https://github.com/hanjm/file_download_proxy/blob/master/main.go#L42
-3. 建议拖回本地时使用迅雷/Folx等专业下载工具以达到最大速度,下载GitHub的大资源只需要粘贴源地址,不要粘贴重定向到AWS的地址
+3. 建议拖回本地时使用迅雷/Folx等多线程下载工具以达到最大速度,下载GitHub的大资源只需要粘贴源地址,不要粘贴重定向到AWS的地址

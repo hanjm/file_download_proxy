@@ -250,6 +250,10 @@ MagnetLoop:
 			t.Size = result.CompletedLength
 			t.Duration = time.Now().Sub(t.StartTime)
 			t.Speed = result.DownloadSpeed
+			if result.CompletedLength == result.TotalLength && !result.Completed() {
+				// why aria2c wait long time even it seems the download is completed.
+				log.Debugf("task status:%+v goto MagnetLoop", result)
+			}
 			// 磁力链接建立任务时无法指定文件名 获得真实文件名后需要重命名
 			realFilename := strings.TrimPrefix(result.GetFilePath(), downloadDir+"/")
 			pos := strings.Index(realFilename, "/")

@@ -262,6 +262,7 @@ MagnetLoop:
 			for _, followedTaskGID := range followedBys {
 				taskGID = followedTaskGID
 				complete = false
+				log.Debugf("task status:%+v goto MagnetLoop", result)
 				goto MagnetLoop
 			}
 		case <-ctx.Done():

@@ -9,16 +9,15 @@ import (
 	"time"
 )
 
-var (
-	// docker下前端页面请求的addr和容器内的服务监听的地址可能不一样, 所以需要addr和port两个变量控制
-	addr                = flag.String("addr", "127.0.0.1:8080", "api addr for frontend request")
-	port                = flag.Int("port", 8080, "service listen port")
-	downloadDir         = flag.String("dir", "download", "download dir")
-	fileSizeLimitGB     = flag.Int64("limit", 5, "the limit size of download file, unit is 'GB'")
-	downloadTimeoutHour = flag.Int64("timeout", 48, "the limit time for finish download task, unit is 'Hour'")
-)
-
 func main() {
+	var (
+		// docker下前端页面请求的addr和容器内的服务监听的地址可能不一样, 所以需要addr和port两个变量控制
+		addr                = flag.String("addr", "127.0.0.1:8080", "api addr for frontend request")
+		port                = flag.Int("port", 8080, "service listen port")
+		downloadDir         = flag.String("dir", "download", "download dir")
+		fileSizeLimitGB     = flag.Int64("limit", 5, "the limit size of download file, unit is 'GB'")
+		downloadTimeoutHour = flag.Int64("timeout", 48, "the limit time for finish download task, unit is 'Hour'")
+	)
 	// 处理flag
 	flag.Parse()
 	err := os.MkdirAll(*downloadDir, 0777)

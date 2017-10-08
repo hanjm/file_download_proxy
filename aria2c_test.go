@@ -10,7 +10,7 @@ import (
 
 func withTestEnv(fn func()) {
 	flag.Parse()
-	pid := Aria2Worker(*downloadDir)
+	pid := Aria2Worker("download")
 	log.Infof("aria2c pid is %d", pid)
 	time.Sleep(time.Second)
 	defer syscall.Kill(pid, syscall.SIGQUIT)

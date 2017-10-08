@@ -2,7 +2,7 @@
 download/
 tdd/
 *.sh
-db.json
+*.json
 .DS_Store
 fdp
 

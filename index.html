@@ -102,7 +102,7 @@
             <div class="form-group col-sm-12" id="main-form">
                 <div class="col-sm-10">
                     <input class="form-control" id="url" name="url"
-                           placeholder="请输入下载地址 http/magnet (建议拖回本地时使用迅雷/Folx等专业下载工具以达到最大速度) GitHub的资源只需要粘贴源地址,不要粘贴重定向到AWS的地址">
+                           placeholder="输入下载地址http/magnet/base64TorrentContent, GitHub的资源只需要粘贴源地址, 不要粘贴重定向到AWS的地址, 拖回本地时支持多线程下载工具">
                 </div>
                 <button type="button" class="btn btn-success col-sm-2" id="create_download_task">下载</button>
             </div>
@@ -127,13 +127,10 @@
         <tbody id="files-info-container"></tbody>
     </table>
     <script>
-        var FILE_API = "http://{{ .BindAddr }}/file_download_proxy/file";
-        var FILES_API = "ws://{{ .BindAddr }}/file_download_proxy/files";
-        var DOWNLOAD_URL = "http://{{ .BindAddr }}/download/";
+        var TASK_URL = "http://{{ .ServerAddr }}/file_download_proxy/task";
+        var WS_URL = "ws://{{ .ServerAddr }}/file_download_proxy/ws";
+        var DOWNLOAD_URL = "http://{{ .ServerAddr }}/download/";
         var HUMAN_READ_UNIT = ["B", "KB", "MB", "GB", "TB", "EB"];
-        function formate_timestamp(timestamp) {
-            return new Date(timestamp * 1000 + 28800000).toISOString().substr(0, 19).replace("T", " ")
-        }
         function get_human_read_size(size) {
             var index = 0;
             for (; size > 1024; index++) {
@@ -167,28 +164,31 @@
             console.log(e.data);
             var data = JSON.parse(e.data);
             var row_counter = 1;
-            for (var file_name in data) {
-                var file_info = data[file_name];
+            var index = 0;
+            for (index in data) {
+                file_info = data[index];
                 var td_size = get_human_read_size(file_info.Size) + " / " + get_human_read_size(file_info.ContentLength);
                 var td_download_speed = get_human_read_size(file_info.Speed) + "/s";
                 var complete_rate = file_info.ContentLength == 0 ? 0 : Math.ceil(file_info.Size / file_info.ContentLength * 100);
-                if (file_info.IsDownloaded) {
+                if (file_info.IsCompleted) {
                     complete_rate = 100
                 }
                 var td_complete_rate = "<div class='progress-container'></div><div class='progress-full'></div><div class='progress-wrapper-left'></div><div class='progress-wrapper-right'></div><div class='progress-right'></div><div class='progress-number'>" + complete_rate + "%</div></div>";
                 var td_download_url = "-";
-                if (file_info.IsDownloaded) {
+                if (file_info.IsCompleted) {
                     td_download_url = "<a href='" + DOWNLOAD_URL + file_info.FileName + "'>" + DOWNLOAD_URL + file_info.FileName + "</a>";
                 }
-                var td_source_url = file_info.SourceUrl.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-                var td_start_time = formate_timestamp(file_info.StartTimeStamp);
-                var td_duration = file_info.IsDownloaded ? file_info.Duration + " 秒" : "-";
-                var td_start_timestamp = file_info.StartTimeStamp * 1000;
-//                    仅更新表格数据不动DOM node
+                var td_source_url = file_info.SourceURL.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+                if (file_info.IsError) {
+                    td_source_url = "错误信息:" + file_info.Error + "<br/><br/>  source_url:" + td_source_url
+                }
+                var td_start_time = file_info.StartTime;
+                var td_duration = new Number(file_info.Duration / 1e9).toFixed(1).toString() + " 秒";
                 var $tr;
                 if (row_counter <= length) {
+//                    仅更新表格数据不动DOM node
                     $tr = $($container.children('tr')[row_counter - 1]);
-                    if (file_info.IsDownloaded) {
+                    if (file_info.IsCompleted) {
                         $tr.removeClass("bg-info").removeClass("bg-danger");
                     } else {
                         if (file_info.IsError) {
@@ -206,14 +206,10 @@
                     $tr.children('.source_url').text(td_source_url);
                     $tr.children('.start_time').text(td_start_time);
                     $tr.children('.duration').text(td_duration);
-
-                    $tr.children('.speed').text(file_info.Speed);
-                    $tr.children('.content_length').text(file_info.ContentLength);
-                    $tr.children('.start_timestamp').text(td_start_timestamp);
                 } else {
 //                        增加tr更新表格数据
                     var template = [];
-                    if (file_info.IsDownloaded) {
+                    if (file_info.IsCompleted) {
                         template.push("<tr>");
                     } else {
                         if (file_info.IsError) {
@@ -233,9 +229,6 @@
                     template.push("<td class='start_time'>" + td_start_time + "</td>");
                     template.push("<td class='duration'>" + td_duration + "</td>");
                     template.push("<td class='delete_file'><button type='button' class='btn btn-default'>&nbsp;删除&nbsp;</button></td>");
-                    template.push("<td class='content_length'>" + file_info.ContentLength + "</td>");
-                    template.push("<td class='speed'>" + file_info.Speed + "</td>");
-                    template.push("<td class='start_timestamp'>" + td_start_timestamp + "</td>");
                     template.push("</tr>");
                     $container.append(template.join(""));
                     $tr = $($container.children('tr')[row_counter - 1]);
@@ -249,7 +242,7 @@
                     var filename = $(this).parent().find(".filename").text();
                     var $self = $(this);
                     $.ajax({
-                        url: FILE_API + "?filename=" + filename,
+                        url: TASK_URL + "?filename=" + filename,
                         method: "DELETE"
                     }).done(function (data) {
                         $self.parent().remove();
@@ -276,7 +269,7 @@
             $url_input.val("");
             if (url != "") {
                 $.ajax({
-                    url: FILE_API,
+                    url: TASK_URL,
                     method: "POST",
                     data: {
                         url: url
@@ -284,28 +277,12 @@
                 }).done(function (data) {
                     $(".alert").addClass("alert-success").append(data + "<br/>").removeClass("alert-danger");
                 }).fail(function (xhr, option, err) {
-                    $(".alert").addClass("alert-danger").append(xhr.responseText + "<br/>").removeClass("alert-success");
+                    $(".alert").addClass("alert-danger").append(xhr.responseText + err.toString() + "<br/>").removeClass("alert-success");
                 })
             }
         });
-        ws = new WebSocket(FILES_API);
+        ws = new WebSocket(WS_URL);
         ws.onmessage = fetch_files_info;
-        //        setInterval(function () {
-        //            $("tr.bg-info").each(
-        //                function () {
-        //                    var $this = $(this);
-        //                    var content_length = parseInt($this.children(".content_length").text());
-        //                    var start_timestamp = parseInt($this.children(".start_timestamp").text());
-        //                    var speed = parseInt($this.children(".speed").text());
-        //                    var rate = parseInt($this.find("div.progress-number").text().trim("%"));
-        //                    var new_rate = (Date.now() - start_timestamp) / 1000 * speed / content_length * 100;
-        ////                        console.log(content_length, start_timestamp, rate, new_rate);
-        //                    if (new_rate > rate && new_rate < 100) {
-        //                        update_circular_progress($this, new_rate)
-        //                    }
-        //                }
-        //            )
-        //        }, 500)
     </script>
 
 </div>

@@ -33,4 +33,18 @@ go build -o fdp && nohup ./fdp > fdp.log 2>&1 &
 then open `http://127.0.0.1:8000/file_download_proxy/`
 
 # custom option
-just run `./fdp -h` see more command line arguments.
+`./fdp -h`
+```
+  -addr string
+        api addr for frontend request (default "127.0.0.1:8080")
+  -aria2cPort int
+        the command-line-arguments 'rpc-listen-port' when start aria2c (default 6902)
+  -dir string
+        download dir (default "download")
+  -limit int
+        the limit size of download file, unit is 'GB' (default 5)
+  -port int
+        service listen port (default 8080)
+  -timeout int
+        the limit time for finish download task, unit is 'Hour' (default 48)
+```

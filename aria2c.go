@@ -113,9 +113,19 @@ func (c *Aria2cRPCClient) callAria2cAndUnmarshal(method string, requestID string
 		err = fmt.Errorf("[callAria2c]marshal rpc req to json error:%s", err)
 		return err
 	}
-	resp, err := c.httpClient.Post(c.requestURL, "application/json-rpc", bytes.NewReader(reqData))
+	var resp *http.Response
+	const maxRetry = 3
+	for retry := 1; retry <= maxRetry; retry++ {
+		resp, err = c.httpClient.Post(c.requestURL, "application/json-rpc", bytes.NewReader(reqData))
+		if err != nil {
+			err = fmt.Errorf("[callAria2c]do request error:%s, is aria2c process running? ", err)
+			log.Warnf("%s, retry... %d/%d", err, retry, maxRetry)
+			time.Sleep(time.Second)
+		} else {
+			break
+		}
+	}
 	if err != nil {
-		err = fmt.Errorf("[callAria2c]do request error:%s, is aria2c process running? ", err)
 		return err
 	}
 	defer resp.Body.Close()

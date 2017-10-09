@@ -23,7 +23,7 @@ func NewConnectionsManger() *ConnectionsManger {
 
 func (cm *ConnectionsManger) Add(conn *websocket.Conn) {
 	// add to map
-	sendChan := make(chan interface{}, 2)
+	sendChan := make(chan interface{}, 100)
 	cm.mutex.Lock()
 	cm.conns[conn] = sendChan
 	cm.mutex.Unlock()
@@ -46,18 +46,26 @@ func (cm *ConnectionsManger) Add(conn *websocket.Conn) {
 			err    error
 		)
 		for {
-			select {
-			case msgObj = <-sendChan:
-				err = conn.WriteJSON(msgObj)
-				if err != nil {
-					err2 := conn.Close()
-					if err2 != nil {
-						log.Errorf("connection %s close error:%s", conn.RemoteAddr(), err2)
-					}
-					log.Infof("connection %s closed, number of active connections %d", conn.RemoteAddr(), len(cm.conns)-1)
-					cm.delete(conn)
-					return
+			// 限量, 取出多条消息, 只推最新一条消息
+			for {
+				select {
+				case msgObj = <-sendChan:
+					log.Debugf("从sendChan取出msgObj.")
+				case <-time.After(time.Second):
+					//log.Debugf("从sendChan取出msgObj, timeout.")
+					goto SEND
 				}
+			}
+		SEND:
+			err = conn.WriteJSON(msgObj)
+			if err != nil {
+				err2 := conn.Close()
+				if err2 != nil {
+					log.Errorf("connection %s close error:%s", conn.RemoteAddr(), err2)
+				}
+				log.Infof("connection %s closed, number of active connections %d", conn.RemoteAddr(), len(cm.conns)-1)
+				cm.delete(conn)
+				return
 			}
 		}
 	}()
@@ -75,4 +83,10 @@ func (cm *ConnectionsManger) Broadcast(msgObj interface{}) {
 	for _, ch := range cm.conns {
 		ch <- msgObj
 	}
+}
+
+func (cm *ConnectionsManger) Count() int {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	return len(cm.conns)
 }

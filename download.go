@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"io/ioutil"
 )
 
 type Task interface {
@@ -204,20 +205,34 @@ func (t *MagnetTask) Download(downloadDir string, limitByteSize int64, limitTime
 	}
 	aria2cRPCClient := NewAria2cRPCClient()
 	var taskGID string
-	// try base64 decode
+	// magnet? / torrent? / torrent file in downloadDir
+	var isMagnetLink bool
+	var torrentBase64 string
 	data, err := base64.StdEncoding.DecodeString(t.SourceURL)
 	if err != nil {
-		taskGID, err = aria2cRPCClient.AddURI(t.SourceURL)
+		if data, err = ioutil.ReadFile(t.SourceURL); err != nil {
+			isMagnetLink = true
+		} else {
+			// try read from torrent file in downloadDir, for reDownload torrent
+			isMagnetLink = false
+			torrentBase64 = base64.StdEncoding.EncodeToString(data)
+		}
+	} else {
+		isMagnetLink = false
+		torrentBase64 = t.SourceURL
+	}
+	if isMagnetLink {
+		taskGID, err = aria2cRPCClient.AddURI(torrentBase64)
 		if err != nil {
 			return t.Errorf("call aria2c AddURI error:%s", err)
 		}
 	} else {
-		taskGID, err = aria2cRPCClient.AddTorrent(t.SourceURL)
+		taskGID, err = aria2cRPCClient.AddTorrent(torrentBase64)
 		if err != nil {
 			return t.Errorf("call aria2c AddTorrent error:%s", err)
 		}
 		// save to file and change the sourceURL
-		torrentFilename := fmt.Sprintf("%s/%s.torrent", downloadDir, t.SourceURL[:16])
+		torrentFilename := fmt.Sprintf("%s/%s.torrent", downloadDir, torrentBase64[:16])
 		fp, err := os.Create(torrentFilename)
 		if err != nil {
 			log.Warnf("os.Create file error:%s", err)
@@ -250,9 +265,12 @@ MagnetLoop:
 			t.Size = result.CompletedLength
 			t.Duration = time.Now().Sub(t.StartTime)
 			t.Speed = result.DownloadSpeed
-			if result.CompletedLength == result.TotalLength && !result.Completed() {
-				// why aria2c wait long time even it seems the download is completed.
-				log.Debugf("task status:%+v goto MagnetLoop", result)
+			if !complete && result.CompletedLength > 0 && result.CompletedLength == result.TotalLength {
+				// why aria2c wait so long time even it seems the download task is completed, may be as a seeder?
+				log.Infof("force to set task status complete, status:%+v", result)
+				time.Sleep(time.Second * 5)
+				log.Infof("force to set task status complete, status:%+v", result)
+				complete = true
 			}
 			// 磁力链接建立任务时无法指定文件名 获得真实文件名后需要重命名
 			realFilename := strings.TrimPrefix(result.GetFilePath(), downloadDir+"/")
@@ -266,7 +284,7 @@ MagnetLoop:
 			for _, followedTaskGID := range followedBys {
 				taskGID = followedTaskGID
 				complete = false
-				log.Debugf("task status:%+v goto MagnetLoop", result)
+				log.Debugf("goto MagnetLoop: task status:%+v", result)
 				goto MagnetLoop
 			}
 		case <-ctx.Done():
@@ -275,10 +293,14 @@ MagnetLoop:
 			}
 		}
 	}
+	err = aria2cRPCClient.RemoveDownloadResult(taskGID)
+	if err != nil {
+		log.Warnf("RemoveDownloadResult error:%s", err)
+	}
 	t.TaskInfo.IsCompleted = true
 	t.Duration = time.Now().Sub(t.StartTime)
 	t.Speed = calculateDownloadSpeed(t.Size, t.Duration)
-	return err
+	return nil
 }
 
 func (t *MagnetTask) IsCompleted() bool {

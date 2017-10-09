@@ -125,8 +125,9 @@ func (m *TasksManager) TaskHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// 正在下载不能删
-		if !m.GetTask(filename).IsCompleted() {
+		if task := m.GetTask(filename); task != nil && task.IsCompleted() {
 			w.WriteHeader(http.StatusBadRequest)
+			log.Infof("[TaskHandler]delete fail,task is downloading %s", filename)
 			w.Write([]byte("task is downloading"))
 			return
 		}
@@ -139,6 +140,7 @@ func (m *TasksManager) TaskHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("DELETE OK"))
+		log.Infof("[TaskHandler]delete ok, %s", filename)
 		m.PushTasksUpdateChan <- struct{}{}
 	default:
 		w.WriteHeader(http.StatusBadRequest)
@@ -315,17 +317,17 @@ func (m *TasksManager) PushTasksUpdateWorker() {
 		for {
 			select {
 			case <-m.PushTasksUpdateChan:
-				//log.Debugf("m.PushTasksUpdateChan received")
+				log.Debugf("m.PushTasksUpdateChan received")
 				m.ConnectionsManger.Broadcast(m.GetTasks())
 			}
 		}
 	}()
 	for {
+		ticker := time.NewTicker(time.Second)
 		select {
-		case <-time.After(time.Second):
-			if m.HasDownloadingTask() {
-				// 当有文件在下载时, 推送下载任务更新信息
-				//log.Debugf("当有文件在下载时, 推送下载任务更新信息")
+		case <-ticker.C:
+			if m.HasDownloadingTask() && m.ConnectionsManger.Count() > 0 {
+				// 当有文件在下载且有连接时, 推送下载任务更新信息
 				m.PushTasksUpdateChan <- struct{}{}
 			}
 		}

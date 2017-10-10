@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/hanjm/log"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -14,7 +15,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-	"io/ioutil"
 )
 
 type Task interface {

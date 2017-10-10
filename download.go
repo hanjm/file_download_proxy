@@ -222,7 +222,7 @@ func (t *MagnetTask) Download(downloadDir string, limitByteSize int64, limitTime
 		torrentBase64 = t.SourceURL
 	}
 	if isMagnetLink {
-		taskGID, err = aria2cRPCClient.AddURI(torrentBase64)
+		taskGID, err = aria2cRPCClient.AddURI(t.SourceURL)
 		if err != nil {
 			return t.Errorf("call aria2c AddURI error:%s", err)
 		}

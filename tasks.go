@@ -125,7 +125,7 @@ func (m *TasksManager) TaskHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// 正在下载不能删
-		if task := m.GetTask(filename); task != nil && task.IsCompleted() {
+		if task := m.GetTask(filename); task != nil && !task.IsCompleted() {
 			w.WriteHeader(http.StatusBadRequest)
 			log.Infof("[TaskHandler]delete fail,task is downloading %s", filename)
 			w.Write([]byte("task is downloading"))

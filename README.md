@@ -1,8 +1,9 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/hanjm/file_download_proxy)](https://goreportcard.com/report/github.com/hanjm/file_download_proxy)
 
 # A self-hosted remote downloader
-it supports http[s](via http.Client), magnet(via aria2 jsonrpc) and base64 string of torrent file content.
-it will display progress with a cool progress circular.
+- supports http[s](via http.Client), magnet(via aria2 jsonrpc) and base64 string of torrent file content.
+- display progress with a cool progress circular.
+- HTTP Basic access authentication (optional).
 it will be useful if you have a vps.
 
 # improving log
@@ -39,6 +40,8 @@ then open `http://127.0.0.1:8000/file_download_proxy/`
         api addr for frontend request (default "127.0.0.1:8080")
   -aria2cPort int
         the command-line-arguments 'rpc-listen-port' when start aria2c (default 6902)
+  -auth string
+        http basic access authentication, username:password
   -dir string
         download dir (default "download")
   -limit int

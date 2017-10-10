@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"github.com/hanjm/log"
 	"html/template"
@@ -9,10 +10,10 @@ import (
 	_ "net/http/pprof"
 )
 
-func HTTPServer(tm *TasksManager, serverAddr string, port int) {
+func HTTPServer(tm *TasksManager, serverAddr string, port int, basicAuth string) {
 	http.Handle("/download/", http.StripPrefix("/download", http.FileServer(http.Dir(tm.downloadDir))))
-	http.HandleFunc("/file_download_proxy/ws", tm.WebSocketHandler)
-	http.HandleFunc("/file_download_proxy/task", tm.TaskHandler)
+	http.Handle("/file_download_proxy/ws", http.HandlerFunc(tm.WebSocketHandler))
+	http.Handle("/file_download_proxy/task", http.HandlerFunc(tm.TaskHandler))
 	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, req *http.Request) {
 		http.ServeFile(w, req, "favicon.ico")
 	})
@@ -26,11 +27,11 @@ func HTTPServer(tm *TasksManager, serverAddr string, port int) {
 	if err != nil {
 		log.Errorf("render index.html error:%s", err)
 	}
-	log.Infof("request api serverAddr:%s", serverAddr)
 	http.Handle("/file_download_proxy/", index)
+	log.Infof("request api serverAddr:%s", serverAddr)
 	listenAddr := fmt.Sprintf(":%d", port)
 	log.Infof("service start at %s", listenAddr)
-	log.Fatal(http.ListenAndServe(listenAddr, nil))
+	log.Fatal(http.ListenAndServe(listenAddr, Auth(http.DefaultServeMux, basicAuth)))
 }
 
 var index *indexHandler
@@ -52,7 +53,7 @@ func (h *indexHandler) reRender() (err error) {
 	return nil
 }
 
-func (h *indexHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (h *indexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write(h.htmlData.Bytes())
 }
@@ -62,4 +63,26 @@ func ReRenderIndexHtml() error {
 		return index.reRender()
 	}
 	return nil
+}
+
+type BasicAuthHandler struct {
+	Token string
+	Next  http.Handler
+}
+
+func (b *BasicAuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if b.Token != "" && r.Header.Get("Authorization") != b.Token {
+		w.Header().Set("WWW-Authenticate", `Basic realm="StatusUnauthorized"`)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	b.Next.ServeHTTP(w, r)
+}
+
+func Auth(handler http.Handler, basicAuth string) http.Handler {
+	var token string
+	if basicAuth != "" {
+		token = fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(basicAuth)))
+	}
+	return &BasicAuthHandler{token, handler}
 }

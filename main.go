@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	"net"
 )
 
 func main() {
@@ -17,9 +18,18 @@ func main() {
 		downloadDir         = flag.String("dir", "download", "download dir")
 		fileSizeLimitGB     = flag.Int64("limit", 5, "the limit size of download file, unit is 'GB'")
 		downloadTimeoutHour = flag.Int64("timeout", 48, "the limit time for finish download task, unit is 'Hour'")
+		basicAuth           = flag.String("auth", "", "http basic access authentication, username:password")
 	)
 	// 处理flag
 	flag.Parse()
+	// parse addr hostname:port args
+	if hostname, port, err := net.SplitHostPort(*addr); err != nil {
+		flag.Usage()
+		log.Fatalf("invalid addr:%s, %s", *addr, err)
+	} else if hostname == "" || port == "" {
+		flag.Usage()
+		log.Fatalf("invalid addr:%s, missing hostname or port.", *addr)
+	}
 	err := os.MkdirAll(*downloadDir, 0777)
 	if err != nil && !os.IsExist(err) {
 		log.Fatalf("fail to create download dir:%s, err:%s", *downloadDir, err)
@@ -31,7 +41,7 @@ func main() {
 	}
 	tasksManager.ListFiles()
 	// http server
-	go HTTPServer(tasksManager, *addr, *port)
+	go HTTPServer(tasksManager, *addr, *port, *basicAuth)
 	// aria2 worker
 	pid := Aria2Worker(*downloadDir)
 	log.Infof("aria2c pid is %d", pid)

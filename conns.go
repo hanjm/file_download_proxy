@@ -54,7 +54,7 @@ func (cm *ConnectionsManger) Add(conn *websocket.Conn) {
 			for {
 				select {
 				case msgObj = <-sendChan:
-					log.Debugf("从sendChan取出msgObj")
+					//log.Debugf("从sendChan取出msgObj")
 				case <-time.After(time.Second):
 					//log.Debugf("从sendChan取出msgObj, timeout.")
 					goto SEND

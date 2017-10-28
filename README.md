@@ -19,7 +19,7 @@ it will be useful if you have a vps.
 
 ```shell
 docker build -t fdp:latest https://raw.githubusercontent.com/hanjm/file_download_proxy/master/Dockerfile
-docker run -it -p 8080:8080 -v `pwd`/download:/go/src/github.com/hanjm/file_download_proxy/download fdp ./fdp -addr ${your public ip:8080} -limit 100
+docker run -it -p 8080:8080 -v `pwd`/download:/go/src/github.com/hanjm/file_download_proxy/download fdp ./fdp -port 8080 -limit 100
 ```
 
 - in vps/mac/linux
@@ -36,8 +36,6 @@ then open `http://127.0.0.1:8000/file_download_proxy/`
 # custom option
 `./fdp -h`
 ```
-  -addr string
-        api addr for frontend request (default "127.0.0.1:8080")
   -aria2cPort int
         the command-line-arguments 'rpc-listen-port' when start aria2c (default 6902)
   -auth string

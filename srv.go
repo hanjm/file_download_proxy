@@ -1,68 +1,28 @@
 package main
 
 import (
-	"bytes"
 	"encoding/base64"
 	"fmt"
 	"github.com/hanjm/log"
-	"html/template"
 	"net/http"
 	_ "net/http/pprof"
 )
 
-func HTTPServer(tm *TasksManager, serverAddr string, port int, basicAuth string) {
+func HTTPServer(tm *TasksManager, port int, basicAuth string) {
 	http.Handle("/download/", http.StripPrefix("/download", http.FileServer(http.Dir(tm.downloadDir))))
 	http.Handle("/file_download_proxy/ws", http.HandlerFunc(tm.WebSocketHandler))
 	http.Handle("/file_download_proxy/task", http.HandlerFunc(tm.TaskHandler))
-	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, req *http.Request) {
-		http.ServeFile(w, req, "favicon.ico")
-	})
-	index = &indexHandler{
-		templateContext: map[string]string{
-			"ServerAddr": serverAddr,
-		},
-		htmlData: new(bytes.Buffer),
-	}
-	err := index.reRender()
-	if err != nil {
-		log.Errorf("render index.html error:%s", err)
-	}
-	http.Handle("/file_download_proxy/", index)
-	log.Infof("request api serverAddr:%s", serverAddr)
+	http.HandleFunc("/favicon.ico", HandleFile("favicon.ico"))
+	http.Handle("/file_download_proxy/", HandleFile("index.html"))
 	listenAddr := fmt.Sprintf(":%d", port)
 	log.Infof("service start at %s", listenAddr)
 	log.Fatal(http.ListenAndServe(listenAddr, Auth(http.DefaultServeMux, basicAuth)))
 }
 
-var index *indexHandler
-
-type indexHandler struct {
-	templateContext map[string]string
-	htmlData        *bytes.Buffer
-}
-
-func (h *indexHandler) reRender() (err error) {
-	//cache index template
-	indexTemplate, err := template.ParseFiles("index.html")
-	if err != nil {
-		return fmt.Errorf("parse index.html error:%s", err)
+func HandleFile(filename string) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		http.ServeFile(w, req, filename)
 	}
-	htmlData := new(bytes.Buffer)
-	indexTemplate.Execute(htmlData, h.templateContext)
-	h.htmlData = htmlData
-	return nil
-}
-
-func (h *indexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write(h.htmlData.Bytes())
-}
-
-func ReRenderIndexHtml() error {
-	if index != nil {
-		return index.reRender()
-	}
-	return nil
 }
 
 type BasicAuthHandler struct {

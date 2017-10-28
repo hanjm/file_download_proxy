@@ -127,9 +127,9 @@
         <tbody id="files-info-container"></tbody>
     </table>
     <script>
-        var TASK_URL = "http://{{ .ServerAddr }}/file_download_proxy/task";
-        var WS_URL = "ws://{{ .ServerAddr }}/file_download_proxy/ws";
-        var DOWNLOAD_URL = "http://{{ .ServerAddr }}/download/";
+        var TASK_URL = "/file_download_proxy/task";
+        var WS_URL = "ws://" + window.location.host + "/file_download_proxy/ws";
+        var DOWNLOAD_URL = "/download/";
         var HUMAN_READ_UNIT = ["B", "KB", "MB", "GB", "TB", "EB"];
         function get_human_read_size(size) {
             var index = 0;

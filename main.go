@@ -7,13 +7,10 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"net"
 )
 
 func main() {
 	var (
-		// docker下前端页面请求的addr和容器内的服务监听的地址可能不一样, 所以需要addr和port两个变量控制
-		addr                = flag.String("addr", "127.0.0.1:8080", "api addr for frontend request")
 		port                = flag.Int("port", 8080, "service listen port")
 		downloadDir         = flag.String("dir", "download", "download dir")
 		fileSizeLimitGB     = flag.Int64("limit", 5, "the limit size of download file, unit is 'GB'")
@@ -22,14 +19,6 @@ func main() {
 	)
 	// 处理flag
 	flag.Parse()
-	// parse addr hostname:port args
-	if hostname, port, err := net.SplitHostPort(*addr); err != nil {
-		flag.Usage()
-		log.Fatalf("invalid addr:%s, %s", *addr, err)
-	} else if hostname == "" || port == "" {
-		flag.Usage()
-		log.Fatalf("invalid addr:%s, missing hostname or port.", *addr)
-	}
 	err := os.MkdirAll(*downloadDir, 0777)
 	if err != nil && !os.IsExist(err) {
 		log.Fatalf("fail to create download dir:%s, err:%s", *downloadDir, err)
@@ -41,7 +30,7 @@ func main() {
 	}
 	tasksManager.ListFiles()
 	// http server
-	go HTTPServer(tasksManager, *addr, *port, *basicAuth)
+	go HTTPServer(tasksManager, *port, *basicAuth)
 	// aria2 worker
 	pid := Aria2Worker(*downloadDir)
 	log.Infof("aria2c pid is %d", pid)
@@ -58,12 +47,6 @@ func main() {
 		log.Infof("received signal %s", s)
 		switch s {
 		case syscall.SIGUSR1:
-			err := ReRenderIndexHtml()
-			if err != nil {
-				log.Errorf("ReRenderIndexHtml error:%s", err)
-			} else {
-				log.Infof("ReRenderIndexHtml success")
-			}
 		case syscall.SIGUSR2:
 			err := tasksManager.BackupToJSON()
 			if err != nil {

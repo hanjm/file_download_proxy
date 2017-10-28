@@ -201,8 +201,13 @@ func Aria2Worker(downloadDir string) (pid int) {
 			}()
 			// log aria2c stdout
 			scanner := bufio.NewScanner(output)
+			var outString string
 			for scanner.Scan() {
-				log.Debugf("[aria2c][stdout]%s", scanner.Text())
+				// 不能让空输出刷屏
+				outString = scanner.Text()
+				if strings.TrimSpace(outString) != "" {
+					log.Debugf("[aria2c][stdout]%s", outString)
+				}
 			}
 			cmd.Wait()
 		}(output)

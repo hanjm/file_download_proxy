@@ -42,8 +42,9 @@ func (cm *ConnectionsManger) Add(conn *websocket.Conn) {
 	// prepare write message
 	go func() {
 		var (
-			msgObj interface{}
-			err    error
+			msgObj       interface{}
+			isNewMessage bool
+			err          error
 		)
 		// 首条消息, 立即发送
 		msgObj = <-sendChan
@@ -51,16 +52,23 @@ func (cm *ConnectionsManger) Add(conn *websocket.Conn) {
 		log.Debugf("first message to %s", conn.RemoteAddr())
 		for {
 			// 之后的消息, 限速: 取出多条消息, 只推最新一条消息
+			isNewMessage = false
 			for {
 				select {
 				case msgObj = <-sendChan:
 					//log.Debugf("从sendChan取出msgObj")
+					isNewMessage = true
 				case <-time.After(time.Second):
 					//log.Debugf("从sendChan取出msgObj, timeout.")
 					goto SEND
 				}
 			}
 		SEND:
+			if !isNewMessage {
+				//log.Debugf("不是新消息, 不推送.")
+				continue
+			}
+			log.Debugf("send message to %s", conn.RemoteAddr())
 			err = conn.WriteJSON(msgObj)
 			if err != nil {
 				err2 := conn.Close()

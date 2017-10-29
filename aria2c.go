@@ -182,7 +182,13 @@ func Aria2Worker(downloadDir string) (pid int) {
 		if err != nil {
 			log.Warnf("kill error:%s", err)
 		}
-		cmd := exec.Command("aria2c", "--dir="+downloadDir, "--enable-rpc", fmt.Sprintf("--rpc-listen-port=%d", *aria2cPort), "--rpc-listen-all=false")
+		cmd := exec.Command("aria2c",
+			"--dir="+downloadDir,
+			"--enable-rpc",
+			fmt.Sprintf("--rpc-listen-port=%d", *aria2cPort),
+			"--rpc-listen-all=false",
+			// https://github.com/ngosang/trackerslist
+			"--bt-tracker=udp://tracker.skyts.net:6969/announce,udp://tracker.safe.moe:6969/announce,udp://tracker.piratepublic.com:1337/announce,udp://tracker.pirateparty.gr:6969/announce,udp://tracker.coppersurfer.tk:6969/announce,udp://tracker.leechers-paradise.org:6969/announce,udp://allesanddro.de:1337/announce,udp://9.rarbg.com:2710/announce,http://p4p.arenabg.com:1337/announce,udp://p4p.arenabg.com:1337/announce,udp://tracker.opentrackr.org:1337/announce,http://tracker.opentrackr.org:1337/announce,udp://public.popcorn-tracker.org:6969/announce,udp://tracker2.christianbro.pw:6969/announce,udp://tracker1.xku.tv:6969/announce,udp://tracker1.wasabii.com.tw:6969/announce,udp://tracker.zer0day.to:1337/announce,udp://tracker.mg64.net:6969/announce,udp://peerfect.org:6969/announce,udp://open.facedatabg.net:6969/announc")
 		output, err := cmd.StdoutPipe()
 		if err != nil {
 			log.Errorf("[Aria2Worker]cmd.StdoutPipe error:%s", err)

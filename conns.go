@@ -93,7 +93,10 @@ func (cm *ConnectionsManger) Broadcast(msgObj interface{}) {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 	for _, ch := range cm.conns {
-		ch <- msgObj
+		select {
+		case ch <- msgObj:
+		default:
+		}
 	}
 }
 

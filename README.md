@@ -10,8 +10,8 @@ it will be useful if you have a vps.
  - 2017-10   : refactor all golang code, more idiomatic, more modular, less global variable, less sync.Mutex.
  - 2017-03   : improved, use fix num of download worker, received task from global channel.
  - 2017-03-17: improved, use websocket server pushing instead of ajax client polling.
- - 2019-09-15: After two years. I believe this is a very valuable integrated GO practice project, because it includes the basic use of the http framework (API / Middleware/ HttpClient) and the advanced use of the http framework (polling / websocket), The use of goroutines and channels, interaction with external processes (json-rpc), etc., practitioners can use the characteristics of GO language to complete it. 
-    两年后我再看这个仓库, 觉得这是一个非常具有价值的综合型GO练手项目, 包括了http框架的基本使用(API接口/Middleware/httpClient)和http框架的进阶使用(轮询/websocket), 协程与channel的使用, 与外部进程交互(json-rpc), 还涉及json, map, mutex, flag, signal, dockerFile等, 练习者可以很好地运用GO语言的特点去实现这个功能.
+ - 2019-09-15: After two years. I believe this is a very valuable integrated GO practice project, because it includes the basic use of the http framework (API / Middleware/ HttpClient) and the advanced use of the http framework (polling / websocket), interaction with external processes (json-rpc), the use of json, map, mutex, goroutine, channel, flag, signal, graceful shutdown, error handling, dockerFile, etc., practitioners can use the characteristics of GO language to complete it. 
+    两年后我再看这个仓库, 觉得这是一个非常具有价值的综合型GO练手项目, 包括了http框架的基本使用(API接口/Middleware/httpClient)和http框架的进阶使用(轮询/websocket), 与外部进程交互(json-rpc), 还涉及json, map, mutex, goroutine, channel, flag, signal, graceful shutdown, error handling, dockerFile等, 练习者可以很好地运用GO语言的特点去实现这个功能.
 
 # live demo
 <http://23.83.230.242/file_download_proxy/>

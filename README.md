@@ -14,21 +14,21 @@ it will be useful if you have a vps.
     两年后我再看这个仓库, 虽然觉得代码和结构有很大的提升空间, 但它仍然是一个非常具有价值的综合型GO练手项目, 因为它包括了http框架的基本使用(API接口/Middleware/httpClient)和http框架的进阶使用(轮询/websocket), 与外部进程交互(json-rpc), 还涉及json, map, mutex, goroutine, channel, flag, signal, graceful shutdown, error handling, dockerFile等, 练习者可以很好地运用GO语言的特点去实现这个功能.
 
 # live demo
-<http://23.83.230.242/file_download_proxy/>
+Null
 
 # how to use
 - in docker
 
 ```shell
-docker build -t fdp:latest https://raw.githubusercontent.com/hanjm/file_download_proxy/master/Dockerfile
-docker run -it -p 8080:8080 -v `pwd`/download:/go/src/github.com/hanjm/file_download_proxy/download fdp ./fdp -port 8080 -limit 100
+docker build -t fdp:latest https://raw.githubusercontent.com/mxue12138/file_download_proxy/master/Dockerfile
+docker run -it -p 8080:8080 -v `pwd`/download:/go/src/github.com/mxue12138/file_download_proxy/download fdp ./fdp -port 8080 -limit 100
 ```
 
 - in vps/mac/linux
 
 ```shell
-go get -v github.com/hanjm/file_download_proxy/...
-git clone https://github.com/hanjm/file_download_proxy.git
+go get -v github.com/mxue12138/file_download_proxy/...
+git clone https://github.com/mxue12138/file_download_proxy.git
 cd file_download_proxy
 go build -o fdp && nohup ./fdp > fdp.log 2>&1 &
 ```
